@@ -50,7 +50,13 @@ const api = {
   getCommunities: () => request('/communities'),
   getCommunityDetails: (id) => request(`/communities/${id}`),
   createCommunity: (data) => request('/communities', { method: 'POST', body: JSON.stringify(data) }),
+  updateCommunity: (id, data) => request(`/communities/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCommunity: (id) => request(`/communities/${id}`, { method: 'DELETE' }),
   toggleJoinCommunity: (id) => request(`/communities/${id}/join`, { method: 'POST' }),
+  removeMember: (id, userId) => request(`/communities/${id}/members/${userId}`, { method: 'DELETE' }),
+  inviteUser: (id, targetEmail) => request(`/communities/${id}/invite`, { method: 'POST', body: JSON.stringify({ targetEmail }) }),
+  getInvitations: () => request('/communities/invitations'),
+  respondToInvitation: (invitationId, action) => request(`/communities/invitations/${invitationId}/respond`, { method: 'POST', body: JSON.stringify({ action }) }),
   
   // Posts, comments, likes
   getCommunityPosts: (commId) => request(`/communities/${commId}/posts`),
@@ -59,6 +65,7 @@ const api = {
   toggleLikePost: (postId) => request(`/communities/posts/${postId}/like`, { method: 'POST' }),
   getPostComments: (postId) => request(`/communities/posts/${postId}/comments`),
   addComment: (postId, data) => request(`/communities/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteComment: (commentId) => request(`/communities/posts/comments/${commentId}`, { method: 'DELETE' }),
 
   // Projects
   getProjects: () => request('/projects'),

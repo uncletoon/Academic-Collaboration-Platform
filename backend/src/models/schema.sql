@@ -44,12 +44,31 @@ CREATE TABLE IF NOT EXISTS academic_communities (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name='academic_communities' AND column_name='privacy_type') THEN
+        ALTER TABLE academic_communities ADD COLUMN privacy_type VARCHAR(50) DEFAULT 'public' CHECK (privacy_type IN ('public', 'private', 'institution'));
+    END IF;
+END
+$$;
+
 -- 5. Community Members
 CREATE TABLE IF NOT EXISTS community_members (
     community_id INT REFERENCES academic_communities(id) ON DELETE CASCADE,
     user_id INT REFERENCES users(id) ON DELETE CASCADE,
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (community_id, user_id)
+);
+
+-- 5b. Community Invitations
+CREATE TABLE IF NOT EXISTS community_invitations (
+    id SERIAL PRIMARY KEY,
+    community_id INT REFERENCES academic_communities(id) ON DELETE CASCADE,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(community_id, user_id)
 );
 
 -- 6. Posts

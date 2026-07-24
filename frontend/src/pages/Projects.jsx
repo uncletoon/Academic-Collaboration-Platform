@@ -11,7 +11,8 @@ import {
   ArrowLeft,
   Settings,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  Users
 } from 'lucide-react';
 
 const Projects = () => {
@@ -212,7 +213,7 @@ const Projects = () => {
 
                   <div className="flex justify-between items-center pt-3 border-t border-slate-200 text-[10px] text-slate-600">
                     <span>Manager: {proj.creator_name}</span>
-                    <span className="font-semibold text-slate-700">👤 {proj.member_count} team members</span>
+                    <span className="font-semibold text-slate-700 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {proj.member_count} team members</span>
                   </div>
                 </div>
               ))}

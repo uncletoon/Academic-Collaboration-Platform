@@ -35,10 +35,17 @@ router.put('/auth/profile', upload.single('avatar'), authCtrl.updateProfile);
 router.get('/auth/users', authCtrl.getUsers);
 
 // --- 3. Academic Communities Routes ---
+router.get('/communities/invitations', commCtrl.getInvitations);
+router.post('/communities/invitations/:invitationId/respond', commCtrl.respondToInvitation);
+
 router.get('/communities', commCtrl.getAllCommunities);
 router.post('/communities', commCtrl.createCommunity);
 router.get('/communities/:id', commCtrl.getCommunityById);
+router.put('/communities/:id', commCtrl.updateCommunity);
+router.delete('/communities/:id', commCtrl.deleteCommunity);
 router.post('/communities/:id/join', commCtrl.toggleJoinCommunity);
+router.post('/communities/:id/invite', commCtrl.inviteUser);
+router.delete('/communities/:id/members/:userId', commCtrl.removeMember);
 
 router.get('/communities/:communityId/posts', commCtrl.getCommunityPosts);
 router.post('/communities/:communityId/posts', commCtrl.createPost);
@@ -47,6 +54,7 @@ router.post('/communities/posts/:postId/like', commCtrl.toggleLikePost);
 
 router.get('/communities/posts/:postId/comments', commCtrl.getPostComments);
 router.post('/communities/posts/:postId/comments', commCtrl.addComment);
+router.delete('/communities/posts/comments/:commentId', commCtrl.deleteComment);
 
 // --- 4. Projects Routes ---
 router.get('/projects', projCtrl.getUserProjects);
