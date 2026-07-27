@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   Home,
+  LayoutDashboard,
   Users,
   FolderGit2,
   CalendarDays,
@@ -18,7 +19,8 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
   const { user, logout } = useAuth();
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home },
+    { id: 'home', label: 'Home', icon: Home },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'communities', label: 'Communities', icon: Users },
     { id: 'projects', label: 'Projects', icon: FolderGit2 },
     { id: 'events', label: 'Events', icon: CalendarDays },

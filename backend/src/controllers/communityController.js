@@ -79,6 +79,12 @@ async function createCommunity(req, res) {
     if (!name || !category) {
       return res.status(400).json({ message: 'Community name and category are required.' });
     }
+    if (!['public', 'private', 'institution'].includes(actualPrivacy)) {
+      return res.status(400).json({ message: 'Invalid community access type.' });
+    }
+    if (actualPrivacy === 'institution' && !req.user.institution_id) {
+      return res.status(400).json({ message: 'You must belong to an institution to create an institution-only community.' });
+    }
 
     // Check unique name
     const checkName = await query('SELECT id FROM academic_communities WHERE name = $1', [name]);
@@ -114,7 +120,7 @@ async function updateCommunity(req, res) {
     const userId = req.user.id;
     const { name, description, category, privacy_type } = req.body;
 
-    const checkComm = await query('SELECT created_by FROM academic_communities WHERE id = $1', [communityId]);
+    const checkComm = await query('SELECT created_by, privacy_type, institution_id FROM academic_communities WHERE id = $1', [communityId]);
     if (checkComm.rowCount === 0) {
       return res.status(404).json({ message: 'Community not found.' });
     }
@@ -123,16 +129,28 @@ async function updateCommunity(req, res) {
       return res.status(403).json({ message: 'Forbidden: Only the owner can edit this community.' });
     }
 
+    const targetPrivacy = privacy_type || checkComm.rows[0].privacy_type;
+    if (!['public', 'private', 'institution'].includes(targetPrivacy)) {
+      return res.status(400).json({ message: 'Invalid community access type.' });
+    }
+    if (targetPrivacy === 'institution' && !checkComm.rows[0].institution_id && !req.user.institution_id) {
+      return res.status(400).json({ message: 'You must belong to an institution to use institution-only access.' });
+    }
+    const targetInstitutionId = targetPrivacy === 'institution'
+      ? (checkComm.rows[0].institution_id || req.user.institution_id)
+      : null;
+
     const updateSql = `
       UPDATE academic_communities
       SET name = COALESCE($1, name),
           description = COALESCE($2, description),
           category = COALESCE($3, category),
-          privacy_type = COALESCE($4, privacy_type)
-      WHERE id = $5
+          privacy_type = $4,
+          institution_id = $5
+      WHERE id = $6
       RETURNING *
     `;
-    const result = await query(updateSql, [name, description, category, privacy_type, communityId]);
+    const result = await query(updateSql, [name, description, category, targetPrivacy, targetInstitutionId, communityId]);
     return res.status(200).json({ message: 'Community updated', community: result.rows[0] });
   } catch (error) {
     console.error('Update community error:', error);
@@ -209,16 +227,19 @@ async function toggleJoinCommunity(req, res) {
     );
 
     if (memberCheck.rowCount > 0) {
+      if (commInfo.created_by === userId) {
+        return res.status(400).json({ message: 'The community owner cannot leave. Delete the community instead.' });
+      }
       // Leave
       await query('DELETE FROM community_members WHERE community_id = $1 AND user_id = $2', [communityId, userId]);
       return res.status(200).json({ message: 'Left community successfully', isMember: false });
     } else {
       // Join rules
-      if (commInfo.privacy_type === 'private' && req.user.role !== 'admin' && commInfo.created_by !== userId) {
+      if (commInfo.privacy_type === 'private') {
          return res.status(403).json({ message: 'This community is private. You must be invited.' });
       }
-      if (commInfo.privacy_type === 'institution' && commInfo.institution_id !== req.user.institution_id && req.user.role !== 'admin') {
-         return res.status(403).json({ message: 'This community is restricted to another institution.' });
+      if (commInfo.privacy_type === 'institution' && commInfo.institution_id !== req.user.institution_id) {
+         return res.status(403).json({ message: 'Only users from the hosting institution can join this community.' });
       }
 
       await query('INSERT INTO community_members (community_id, user_id) VALUES ($1, $2)', [communityId, userId]);
@@ -237,7 +258,7 @@ async function inviteUser(req, res) {
     const currentUserId = req.user.id;
     const { targetEmail } = req.body;
 
-    const checkComm = await query('SELECT created_by FROM academic_communities WHERE id = $1', [communityId]);
+    const checkComm = await query('SELECT created_by, privacy_type, institution_id FROM academic_communities WHERE id = $1', [communityId]);
     if (checkComm.rowCount === 0) return res.status(404).json({ message: 'Community not found.' });
 
     if (checkComm.rows[0].created_by !== currentUserId && req.user.role !== 'admin') {
@@ -246,9 +267,15 @@ async function inviteUser(req, res) {
 
     if (!targetEmail) return res.status(400).json({ message: 'Target email is required.' });
 
-    const userQuery = await query('SELECT id FROM users WHERE email = $1', [targetEmail.toLowerCase()]);
+    const userQuery = await query('SELECT id, institution_id FROM users WHERE email = $1', [targetEmail.trim().toLowerCase()]);
     if (userQuery.rowCount === 0) return res.status(404).json({ message: 'User with this email not found.' });
     const targetUserId = userQuery.rows[0].id;
+    if (
+      checkComm.rows[0].privacy_type === 'institution'
+      && checkComm.rows[0].institution_id !== userQuery.rows[0].institution_id
+    ) {
+      return res.status(403).json({ message: 'This user does not belong to the community institution.' });
+    }
 
     const checkMem = await query('SELECT 1 FROM community_members WHERE community_id = $1 AND user_id = $2', [communityId, targetUserId]);
     if (checkMem.rowCount > 0) return res.status(400).json({ message: 'User is already a member.' });
@@ -316,6 +343,20 @@ async function respondToInvitation(req, res) {
     const inv = checkInv.rows[0];
 
     if (action === 'accept') {
+       const accessCheck = await query(
+         `SELECT ac.privacy_type, ac.institution_id, u.institution_id AS user_institution_id
+          FROM academic_communities ac
+          JOIN users u ON u.id = $2
+          WHERE ac.id = $1`,
+         [inv.community_id, userId]
+       );
+       if (accessCheck.rowCount === 0) {
+         return res.status(404).json({ message: 'Community not found.' });
+       }
+       const access = accessCheck.rows[0];
+       if (access.privacy_type === 'institution' && access.institution_id !== access.user_institution_id) {
+         return res.status(403).json({ message: 'You no longer belong to the institution required by this community.' });
+       }
        await query('INSERT INTO community_members (community_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [inv.community_id, userId]);
        await query('UPDATE community_invitations SET status = $1 WHERE id = $2', ['accepted', invitationId]);
        return res.status(200).json({ message: 'Invitation accepted.' });

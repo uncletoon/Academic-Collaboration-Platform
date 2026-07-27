@@ -3,25 +3,27 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { NotificationProvider } from './context/NotificationContext';
 import MainLayout from './layouts/MainLayout';
+import HomeLayout from './layouts/HomeLayout';
 
 // Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import Communities from './pages/Communities';
-import Projects from './pages/Projects';
-import Events from './pages/Events';
+import Communities from './pages/CommunityPage';
+import Projects from './pages/ProjectsPage';
+import Events from './pages/EventsPage';
 import Research from './pages/Research';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import Search from './pages/Search';
+import Home from './pages/Home';
 
 const AppContent = () => {
   const { user, loading } = useAuth();
   const getPathTab = () => {
     const path = window.location.pathname.replace('/', '');
-    return path || 'dashboard';
+    return path || 'home';
   };
 
   const [currentTab, setCurrentTab] = useState(getPathTab());
@@ -95,6 +97,8 @@ const AppContent = () => {
     switch (currentTab) {
       case 'dashboard':
         return <Dashboard setCurrentTab={handleTabChange} />;
+      case 'home':
+        return <Home setCurrentTab={handleTabChange} />;
       case 'communities':
         return <Communities />;
       case 'projects':
@@ -112,9 +116,17 @@ const AppContent = () => {
       case 'search':
         return <Search queryStr={searchValue} setCurrentTab={handleTabChange} />;
       default:
-        return <Dashboard setCurrentTab={handleTabChange} />;
+        return <Home setCurrentTab={handleTabChange} />;
     }
   };
+
+  if (currentTab === 'home') {
+    return (
+      <HomeLayout setCurrentTab={handleTabChange}>
+        <Home setCurrentTab={handleTabChange} />
+      </HomeLayout>
+    );
+  }
 
   return (
     <MainLayout
