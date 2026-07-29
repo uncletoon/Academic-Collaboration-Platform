@@ -58,12 +58,16 @@ router.delete('/communities/posts/comments/:commentId', commCtrl.deleteComment);
 
 // --- 4. Projects Routes ---
 router.get('/projects', projCtrl.getUserProjects);
-router.post('/projects', projCtrl.createProject);
+router.post('/projects', upload.array('supportiveDocuments', 8), projCtrl.createProject);
 router.get('/projects/:id', projCtrl.getProjectById);
 router.put('/projects/:id', projCtrl.updateProject);
-router.post('/projects/:id/members', projCtrl.addProjectMember);
+router.delete('/projects/:id', projCtrl.deleteProject);
+router.post('/projects/:id/join-requests', projCtrl.requestToJoin);
+router.post('/projects/:id/join-requests/:requestId/respond', projCtrl.respondToJoinRequest);
+router.delete('/projects/:id/membership', projCtrl.leaveProject);
 router.delete('/projects/:id/members/:memberId', projCtrl.removeProjectMember);
 router.post('/projects/:id/files', upload.single('projectFile'), projCtrl.uploadProjectFile);
+router.get('/projects/:id/files/:fileId/download', projCtrl.downloadProjectFile);
 router.delete('/projects/:id/files/:fileId', projCtrl.deleteProjectFile);
 
 // --- 5. Academic Events Routes ---

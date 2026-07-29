@@ -6,10 +6,10 @@
 
 ---
 
-**Project:** Aca Collaboration
-**Generated:** 2026-07-27 16:35:55
+**Project:** ACA Collaboration
+**Generated:** 2026-07-29 19:03:58
 **Category:** Research Lab / University Department
-**Design Dials:** Variance 6/10 (Balanced / Modern) | Motion 4/10 (Standard) | Density 4/10 (Standard)
+**Design Dials:** Variance 7/10 (Balanced / Modern) | Motion 4/10 (Standard) | Density 6/10 (Standard)
 
 ---
 
@@ -19,18 +19,18 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#2563EB` | `--color-primary` |
+| Primary | `#1E3A5F` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#0891B2` | `--color-secondary` |
-| Accent/CTA | `#D97706` | `--color-accent` |
+| Secondary | `#2563EB` | `--color-secondary` |
+| Accent/CTA | `#A16207` | `--color-accent` |
 | Background | `#F8FAFC` | `--color-background` |
 | Foreground | `#0F172A` | `--color-foreground` |
-| Muted | `#F1F5FD` | `--color-muted` |
-| Border | `#E4ECFC` | `--color-border` |
+| Muted | `#E9EEF5` | `--color-muted` |
+| Border | `#CBD5E1` | `--color-border` |
 | Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#2563EB` | `--color-ring` |
+| Ring | `#1E3A5F` | `--color-ring` |
 
-**Color Notes:** Knowledge blue + accepted green + reputation gold
+**Color Notes:** Institutional navy + research accent + serif headings
 
 ### Typography
 
@@ -46,7 +46,7 @@
 
 ### Spacing Variables
 
-*Density: 4/10 — Standard*
+*Density: 6/10 — Standard*
 
 | Token | Value | Usage |
 |-------|-------|-------|
@@ -76,7 +76,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #D97706;
+  background: #A16207;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -93,8 +93,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #2563EB;
-  border: 2px solid #2563EB;
+  color: #1E3A5F;
+  border: 2px solid #1E3A5F;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -133,9 +133,9 @@
 }
 
 .input:focus {
-  border-color: #2563EB;
+  border-color: #1E3A5F;
   outline: none;
-  box-shadow: 0 0 0 3px #2563EB20;
+  box-shadow: 0 0 0 3px #1E3A5F20;
 }
 ```
 
@@ -161,21 +161,21 @@
 
 ## Style Guidelines
 
-**Style:** Soft UI Evolution
+**Style:** Editorial Grid / Magazine
 
-**Keywords:** Evolved soft UI, better contrast, modern aesthetics, subtle depth, accessibility-focused, improved shadows, hybrid
+**Keywords:** Magazine layout, asymmetric grid, editorial typography, pull quotes, drop caps, column layout, print-inspired
 
-**Best For:** Modern enterprise apps, SaaS platforms, health/wellness, modern business tools, professional, hybrid
+**Best For:** News sites, blogs, magazines, editorial content, long-form articles, journalism, publishing
 
-**Key Effects:** Improved shadows (softer than flat, clearer than neumorphism), modern (200-300ms), focus visible, WCAG AA/AAA
+**Key Effects:** Smooth scroll, reveal on scroll, parallax images, text animations, page-flip transitions
 
 ### Page Pattern
 
-**Pattern Name:** Community/Forum Landing
+**Pattern Name:** Newsletter / Content First
 
-- **Conversion Strategy:** Show active community (member count, posts today). Highlight benefits. Preview content. Easy onboarding.
-- **CTA Placement:** Join button prominent + After member showcase
-- **Section Order:** 1. Hero (community value prop), 2. Popular topics/categories, 3. Active members showcase, 4. Join CTA
+- **Conversion Strategy:** Single field form (Email only). Show 'Join X, 000 readers'. Read sample link.
+- **CTA Placement:** Hero inline form + Sticky header form
+- **Section Order:** 1. Hero (Value Prop + Form), 2. Recent Issues/Archives, 3. Social Proof (Subscriber count), 4. About Author
 
 ---
 

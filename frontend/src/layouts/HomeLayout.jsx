@@ -20,7 +20,7 @@ const HomeLayout = ({ children, setCurrentTab }) => {
 
   const navItems = [
     { id: 'communities', label: 'Communities', icon: Users },
-    { id: 'projects', label: 'Projects', icon: FolderKanban },
+    { id: 'projects', label: 'Collaboration', icon: FolderKanban },
     { id: 'events', label: 'Events', icon: CalendarDays },
   ];
 
@@ -29,9 +29,9 @@ const HomeLayout = ({ children, setCurrentTab }) => {
       <a className="home-skip-link" href="#home-content">Skip to content</a>
       <header className="home-nav">
         <div className="home-nav__inner">
-          <button className="home-brand" onClick={() => navigate('home')} aria-label="Aca Collaboration home">
+          <button className="home-brand" onClick={() => navigate('home')} aria-label="Collaboration home">
             <span><GraduationCap aria-hidden="true" /></span>
-            <span><strong>Aca</strong><small>Collaboration</small></span>
+            <span><strong>Collaboration</strong><small>Academic portal</small></span>
           </button>
 
           <nav className="home-nav__links" aria-label="Main navigation">
@@ -73,7 +73,7 @@ const HomeLayout = ({ children, setCurrentTab }) => {
       {mobileOpen && (
         <div className="home-mobile-nav">
           <div className="home-mobile-nav__head">
-            <span>Navigate Aca</span>
+            <span>Navigate Collaboration</span>
             <button onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X /></button>
           </div>
           {navItems.map(({ id, label, icon: Icon }) => (
@@ -86,7 +86,7 @@ const HomeLayout = ({ children, setCurrentTab }) => {
 
       <main id="home-content" className="home-content">{children}</main>
       <footer className="home-footer">
-        <div className="home-footer__brand"><GraduationCap /><span><strong>Aca Collaboration</strong><small>Where academic progress finds its people.</small></span></div>
+        <div className="home-footer__brand"><GraduationCap /><span><strong>Collaboration</strong><small>Where academic progress finds its people.</small></span></div>
         <p>Built for thoughtful work across institutions and disciplines.</p>
       </footer>
     </div>

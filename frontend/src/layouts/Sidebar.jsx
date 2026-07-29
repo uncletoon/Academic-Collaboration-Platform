@@ -22,7 +22,7 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
     { id: 'home', label: 'Home', icon: Home },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'communities', label: 'Communities', icon: Users },
-    { id: 'projects', label: 'Projects', icon: FolderGit2 },
+    { id: 'projects', label: 'Collaboration', icon: FolderGit2 },
     { id: 'events', label: 'Events', icon: CalendarDays },
     { id: 'research', label: 'Research', icon: BookOpen },
     { id: 'chat', label: 'Discussions', icon: MessageSquareCode },
@@ -55,10 +55,10 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
           </div>
           <div>
             <h1 className="text-lg font-bold font-display tracking-tight text-blue-800">
-              Aca Collaboration
+              Collaboration
             </h1>
             <p className="text-[10px] font-semibold uppercase tracking-widest flex items-center gap-1">
-              Portal
+              Private Projects
             </p>
           </div>
           

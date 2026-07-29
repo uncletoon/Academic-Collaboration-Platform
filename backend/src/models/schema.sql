@@ -102,11 +102,38 @@ CREATE TABLE IF NOT EXISTS likes (
 CREATE TABLE IF NOT EXISTS projects (
     id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    description TEXT,
+    description TEXT NOT NULL,
     created_by INT REFERENCES users(id) ON DELETE SET NULL,
     status VARCHAR(50) DEFAULT 'planning' CHECK (status IN ('planning', 'active', 'completed')),
+    requirements JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(requirements) = 'array'),
+    privacy_type VARCHAR(20) NOT NULL DEFAULT 'private' CHECK (privacy_type = 'private'),
+    access_scope VARCHAR(50) NOT NULL DEFAULT 'everyone' CHECK (access_scope IN ('everyone', 'institution')),
+    institution_id INT REFERENCES institutions(id) ON DELETE SET NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='requirements') THEN
+        ALTER TABLE projects ADD COLUMN requirements JSONB NOT NULL DEFAULT '[]'::jsonb;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='access_scope') THEN
+        ALTER TABLE projects ADD COLUMN access_scope VARCHAR(50) NOT NULL DEFAULT 'everyone'
+            CHECK (access_scope IN ('everyone', 'institution'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='privacy_type') THEN
+        ALTER TABLE projects ADD COLUMN privacy_type VARCHAR(20) NOT NULL DEFAULT 'private'
+            CHECK (privacy_type = 'private');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='institution_id') THEN
+        ALTER TABLE projects ADD COLUMN institution_id INT REFERENCES institutions(id) ON DELETE SET NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='updated_at') THEN
+        ALTER TABLE projects ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+    END IF;
+END
+$$;
 
 -- 10. Project Members
 CREATE TABLE IF NOT EXISTS project_members (
@@ -117,15 +144,40 @@ CREATE TABLE IF NOT EXISTS project_members (
     PRIMARY KEY (project_id, user_id)
 );
 
+-- 10b. Project Join Requests
+CREATE TABLE IF NOT EXISTS project_join_requests (
+    id SERIAL PRIMARY KEY,
+    project_id INT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+    requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    responded_at TIMESTAMP WITH TIME ZONE,
+    responded_by INT REFERENCES users(id) ON DELETE SET NULL,
+    UNIQUE(project_id, user_id)
+);
+
 -- 11. Project Files
 CREATE TABLE IF NOT EXISTS project_files (
     id SERIAL PRIMARY KEY,
     project_id INT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     filename VARCHAR(255) NOT NULL,
     filepath VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(255),
+    file_size BIGINT,
     uploaded_by INT REFERENCES users(id) ON DELETE SET NULL,
     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='project_files' AND column_name='mime_type') THEN
+        ALTER TABLE project_files ADD COLUMN mime_type VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='project_files' AND column_name='file_size') THEN
+        ALTER TABLE project_files ADD COLUMN file_size BIGINT;
+    END IF;
+END
+$$;
 
 -- 12. Events
 CREATE TABLE IF NOT EXISTS events (

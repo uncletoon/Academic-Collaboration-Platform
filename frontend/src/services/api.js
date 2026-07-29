@@ -34,6 +34,38 @@ const request = async (endpoint, options = {}) => {
   return data;
 };
 
+const downloadProtectedFile = async (endpoint, filename, openInline = false) => {
+  const token = getAuthToken();
+  const previewWindow = openInline ? window.open('', '_blank') : null;
+  try {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || 'Unable to access this file');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    if (openInline) {
+      if (previewWindow) previewWindow.location.href = url;
+      else window.location.assign(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    previewWindow?.close();
+    throw error;
+  }
+};
+
 const api = {
   // Metadata
   getInstitutions: () => request('/meta/institutions'),
@@ -70,11 +102,16 @@ const api = {
   // Projects
   getProjects: () => request('/projects'),
   getProjectDetails: (id) => request(`/projects/${id}`),
-  createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
+  createProject: (formData) => request('/projects', { method: 'POST', body: formData }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  addProjectMember: (id, memberData) => request(`/projects/${id}/members`, { method: 'POST', body: JSON.stringify(memberData) }),
+  deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
+  requestToJoinProject: (id) => request(`/projects/${id}/join-requests`, { method: 'POST' }),
+  respondToProjectRequest: (id, requestId, action) => request(`/projects/${id}/join-requests/${requestId}/respond`, { method: 'POST', body: JSON.stringify({ action }) }),
+  leaveProject: (id) => request(`/projects/${id}/membership`, { method: 'DELETE' }),
   removeProjectMember: (id, memberId) => request(`/projects/${id}/members/${memberId}`, { method: 'DELETE' }),
   uploadProjectFile: (id, formData) => request(`/projects/${id}/files`, { method: 'POST', body: formData }),
+  readProjectFile: (id, file) => downloadProtectedFile(`/projects/${id}/files/${file.id}/download`, file.filename, true),
+  downloadProjectFile: (id, file) => downloadProtectedFile(`/projects/${id}/files/${file.id}/download?download=1`, file.filename),
   deleteProjectFile: (id, fileId) => request(`/projects/${id}/files/${fileId}`, { method: 'DELETE' }),
 
   // Events
