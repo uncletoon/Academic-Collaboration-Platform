@@ -74,6 +74,7 @@ router.delete('/projects/:id/files/:fileId', projCtrl.deleteProjectFile);
 router.get('/events', eventCtrl.getAllEvents);
 router.post('/events', eventCtrl.createEvent);
 router.get('/events/:id', eventCtrl.getEventById);
+router.put('/events/:id', eventCtrl.updateEvent);
 router.post('/events/:id/register', eventCtrl.toggleEventRegistration);
 router.delete('/events/:id', eventCtrl.deleteEvent);
 
@@ -99,13 +100,13 @@ router.put('/notifications/:id', notifCtrl.markAsRead);
 router.get('/search', searchCtrl.globalSearch);
 
 // --- 10. Administrator Dashboard Routes (Admin Access Only) ---
-router.use(authorizeRoles('admin'));
-
-router.get('/admin/stats', adminCtrl.getAdminStats);
-router.get('/admin/users', adminCtrl.getAllUsersDetailed);
-router.put('/admin/users/:userId/status', adminCtrl.toggleUserStatus);
-router.put('/admin/users/:userId/role', adminCtrl.changeUserRole);
-router.delete('/admin/communities/:id', adminCtrl.adminDeleteCommunity);
-router.delete('/admin/events/:id', adminCtrl.adminDeleteEvent);
+// Keep authorization route-scoped so an unmatched application route returns 404
+// instead of falling through to a misleading admin-only error.
+router.get('/admin/stats', authorizeRoles('admin'), adminCtrl.getAdminStats);
+router.get('/admin/users', authorizeRoles('admin'), adminCtrl.getAllUsersDetailed);
+router.put('/admin/users/:userId/status', authorizeRoles('admin'), adminCtrl.toggleUserStatus);
+router.put('/admin/users/:userId/role', authorizeRoles('admin'), adminCtrl.changeUserRole);
+router.delete('/admin/communities/:id', authorizeRoles('admin'), adminCtrl.adminDeleteCommunity);
+router.delete('/admin/events/:id', authorizeRoles('admin'), adminCtrl.adminDeleteEvent);
 
 module.exports = router;

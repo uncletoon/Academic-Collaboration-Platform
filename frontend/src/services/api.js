@@ -118,6 +118,7 @@ const api = {
   getEvents: () => request('/events'),
   getEventDetails: (id) => request(`/events/${id}`),
   createEvent: (data) => request('/events', { method: 'POST', body: JSON.stringify(data) }),
+  updateEvent: (id, data) => request(`/events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleEventRegistration: (id) => request(`/events/${id}/register`, { method: 'POST' }),
   deleteEvent: (id) => request(`/events/${id}`, { method: 'DELETE' }),
 

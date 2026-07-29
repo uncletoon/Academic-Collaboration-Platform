@@ -6,17 +6,28 @@ async function getAllEvents(req, res) {
   try {
     const userId = req.user.id;
     const sql = `
-      SELECT e.*, 
+      SELECT e.id, e.title, e.description, e.event_date, e.location, e.organizer_id,
+             e.institution_id, e.capacity, e.created_at, e.updated_at,
              u.full_name as organizer_name,
              i.name as institution_name,
              (SELECT COUNT(*)::int FROM event_registrations WHERE event_id = e.id) as registered_count,
-             EXISTS(SELECT 1 FROM event_registrations WHERE event_id = e.id AND user_id = $1) as is_registered
+             EXISTS(SELECT 1 FROM event_registrations WHERE event_id = e.id AND user_id = $1) as is_registered,
+             CASE
+               WHEN $2 = 'admin' OR e.organizer_id = $1 OR EXISTS(
+                 SELECT 1 FROM event_registrations WHERE event_id = e.id AND user_id = $1
+               ) THEN e.meeting_link
+               ELSE NULL
+             END as meeting_link
       FROM events e
       LEFT JOIN users u ON e.organizer_id = u.id
       LEFT JOIN institutions i ON e.institution_id = i.id
+      WHERE $2 = 'admin'
+         OR e.organizer_id = $1
+         OR e.institution_id IS NULL
+         OR e.institution_id = $3
       ORDER BY e.event_date ASC
     `;
-    const result = await query(sql, [userId]);
+    const result = await query(sql, [userId, req.user.role, req.user.institution_id]);
     return res.status(200).json({ events: result.rows });
   } catch (error) {
     console.error('Fetch events error:', error);
@@ -31,34 +42,51 @@ async function getEventById(req, res) {
     const eventId = parseInt(req.params.id);
 
     const eventSql = `
-      SELECT e.*, 
+      SELECT e.id, e.title, e.description, e.event_date, e.location, e.organizer_id,
+             e.institution_id, e.capacity, e.created_at, e.updated_at,
              u.full_name as organizer_name,
              i.name as institution_name,
              (SELECT COUNT(*)::int FROM event_registrations WHERE event_id = e.id) as registered_count,
-             EXISTS(SELECT 1 FROM event_registrations WHERE event_id = e.id AND user_id = $1) as is_registered
+             EXISTS(SELECT 1 FROM event_registrations WHERE event_id = e.id AND user_id = $1) as is_registered,
+             CASE
+               WHEN $3 = 'admin' OR e.organizer_id = $1 OR EXISTS(
+                 SELECT 1 FROM event_registrations WHERE event_id = e.id AND user_id = $1
+               ) THEN e.meeting_link
+               ELSE NULL
+             END as meeting_link
       FROM events e
       LEFT JOIN users u ON e.organizer_id = u.id
       LEFT JOIN institutions i ON e.institution_id = i.id
       WHERE e.id = $2
+        AND (
+          $3 = 'admin'
+          OR e.organizer_id = $1
+          OR e.institution_id IS NULL
+          OR e.institution_id = $4
+        )
     `;
-    const eventRes = await query(eventSql, [userId, eventId]);
+    const eventRes = await query(eventSql, [userId, eventId, req.user.role, req.user.institution_id]);
     if (eventRes.rowCount === 0) {
       return res.status(404).json({ message: 'Event not found.' });
     }
 
-    // Fetch attendees
-    const attendeesSql = `
-      SELECT u.id, u.full_name, u.email, u.role, u.avatar_url, er.registered_at
-      FROM event_registrations er
-      JOIN users u ON er.user_id = u.id
-      WHERE er.event_id = $1
-      ORDER BY er.registered_at ASC
-    `;
-    const attendeesRes = await query(attendeesSql, [eventId]);
+    const event = eventRes.rows[0];
+    let attendees = [];
+    if (Number(event.organizer_id) === Number(userId) || req.user.role === 'admin') {
+      const attendeesSql = `
+        SELECT u.id, u.full_name, u.email, u.role, u.avatar_url, er.registered_at
+        FROM event_registrations er
+        JOIN users u ON er.user_id = u.id
+        WHERE er.event_id = $1
+        ORDER BY er.registered_at ASC
+      `;
+      const attendeesRes = await query(attendeesSql, [eventId]);
+      attendees = attendeesRes.rows;
+    }
 
     return res.status(200).json({
-      event: eventRes.rows[0],
-      attendees: attendeesRes.rows
+      event,
+      attendees
     });
   } catch (error) {
     console.error('Fetch event details error:', error);
@@ -69,7 +97,7 @@ async function getEventById(req, res) {
 // Create event (Lecturers, Researchers, Admins only)
 async function createEvent(req, res) {
   try {
-    const { title, description, eventDate, location, capacity, isInstitutional } = req.body;
+    const { title, description, eventDate, location, meetingLink, capacity, isInstitutional } = req.body;
     const userId = req.user.id;
     const role = req.user.role;
 
@@ -77,22 +105,26 @@ async function createEvent(req, res) {
       return res.status(403).json({ message: 'Forbidden: Students cannot organize events.' });
     }
 
-    if (!title || !eventDate || !location) {
-      return res.status(400).json({ message: 'Title, date, and location are required.' });
+    if (!title || !description || !eventDate) {
+      return res.status(400).json({ message: 'Title, description, and date are required.' });
+    }
+    if (isInstitutional && !req.user.institution_id) {
+      return res.status(400).json({ message: 'Add an institution to your profile before creating an institution-only event.' });
     }
 
     const institutionId = isInstitutional ? req.user.institution_id : null;
 
     const insertSql = `
-      INSERT INTO events (title, description, event_date, location, organizer_id, institution_id, capacity)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO events (title, description, event_date, location, meeting_link, organizer_id, institution_id, capacity)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `;
     const result = await query(insertSql, [
       title,
-      description || '',
+      description,
       new Date(eventDate),
-      location,
+      location?.trim() || 'Online',
+      meetingLink?.trim() || null,
       userId,
       institutionId,
       capacity ? parseInt(capacity) : 100
@@ -132,6 +164,58 @@ async function createEvent(req, res) {
   }
 }
 
+// Update event (Organizer or Admin)
+async function updateEvent(req, res) {
+  try {
+    const eventId = parseInt(req.params.id);
+    const userId = req.user.id;
+    const { title, description, eventDate, location, meetingLink, capacity, isInstitutional } = req.body;
+
+    const eventQuery = await query('SELECT organizer_id, institution_id FROM events WHERE id = $1', [eventId]);
+    if (eventQuery.rowCount === 0) {
+      return res.status(404).json({ message: 'Event not found.' });
+    }
+    if (Number(eventQuery.rows[0].organizer_id) !== Number(userId) && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden: Only the event creator or an administrator can update this event.' });
+    }
+    if (!title || !description || !eventDate) {
+      return res.status(400).json({ message: 'Title, description, and date are required.' });
+    }
+    if (isInstitutional && req.user.role !== 'admin' && !req.user.institution_id) {
+      return res.status(400).json({ message: 'Add an institution to your profile before restricting this event.' });
+    }
+    if (isInstitutional && req.user.role === 'admin' && !eventQuery.rows[0].institution_id) {
+      return res.status(400).json({ message: 'This event has no institution to restrict access to.' });
+    }
+
+    const institutionId = isInstitutional
+      ? (req.user.role === 'admin' ? eventQuery.rows[0].institution_id : req.user.institution_id)
+      : null;
+    const result = await query(
+      `UPDATE events
+       SET title = $1, description = $2, event_date = $3, location = $4,
+           meeting_link = $5, capacity = $6, institution_id = $7, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $8
+       RETURNING *`,
+      [
+        title,
+        description,
+        new Date(eventDate),
+        location?.trim() || 'Online',
+        meetingLink?.trim() || null,
+        capacity ? parseInt(capacity) : 100,
+        institutionId,
+        eventId,
+      ]
+    );
+
+    return res.status(200).json({ message: 'Event updated successfully.', event: result.rows[0] });
+  } catch (error) {
+    console.error('Update event error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
 // Register / Cancel registration toggle
 async function toggleEventRegistration(req, res) {
   try {
@@ -145,7 +229,11 @@ async function toggleEventRegistration(req, res) {
     const event = eventQuery.rows[0];
 
     // Check institutional restriction
-    if (event.institution_id && event.institution_id !== req.user.institution_id) {
+    if (
+      req.user.role !== 'admin' &&
+      event.institution_id &&
+      Number(event.institution_id) !== Number(req.user.institution_id)
+    ) {
       return res.status(403).json({ message: 'Forbidden: This event is restricted to members of the hosting institution.' });
     }
 
@@ -215,6 +303,7 @@ module.exports = {
   getAllEvents,
   getEventById,
   createEvent,
+  updateEvent,
   toggleEventRegistration,
   deleteEvent,
 };

@@ -186,11 +186,24 @@ CREATE TABLE IF NOT EXISTS events (
     description TEXT,
     event_date TIMESTAMP WITH TIME ZONE NOT NULL,
     location VARCHAR(255) NOT NULL,
+    meeting_link VARCHAR(1000),
     organizer_id INT REFERENCES users(id) ON DELETE SET NULL,
     institution_id INT REFERENCES institutions(id) ON DELETE SET NULL, -- null means open to all institutions
     capacity INT DEFAULT 100,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='events' AND column_name='meeting_link') THEN
+        ALTER TABLE events ADD COLUMN meeting_link VARCHAR(1000);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='events' AND column_name='updated_at') THEN
+        ALTER TABLE events ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+    END IF;
+END
+$$;
 
 -- 13. Event Registrations
 CREATE TABLE IF NOT EXISTS event_registrations (
