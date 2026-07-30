@@ -38,7 +38,7 @@ const HomeLayout = ({ children, setCurrentTab }) => {
             {navItems.map(({ id, label }) => (
               <button key={id} onClick={() => navigate(id)}>{label}</button>
             ))}
-            <button onClick={() => navigate('research')}>Research</button>
+            <button onClick={() => navigate('news')}>News</button>
           </nav>
 
           <div className="home-nav__actions">
@@ -79,7 +79,7 @@ const HomeLayout = ({ children, setCurrentTab }) => {
           {navItems.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => navigate(id)}><Icon /> {label}</button>
           ))}
-          <button onClick={() => navigate('research')}><GraduationCap /> Research</button>
+          <button onClick={() => navigate('news')}><GraduationCap /> News</button>
           <button onClick={() => navigate('dashboard')}><LayoutDashboard /> Dashboard</button>
         </div>
       )}

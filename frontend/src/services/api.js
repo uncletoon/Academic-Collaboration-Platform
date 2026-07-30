@@ -122,11 +122,14 @@ const api = {
   toggleEventRegistration: (id) => request(`/events/${id}/register`, { method: 'POST' }),
   deleteEvent: (id) => request(`/events/${id}`, { method: 'DELETE' }),
 
-  // Research
-  getResearch: () => request('/research'),
-  uploadResearch: (formData) => request('/research', { method: 'POST', body: formData }),
-  getDownloadUrl: (id) => `${API_URL}/research/${id}/download`,
-  deleteResearch: (id) => request(`/research/${id}`, { method: 'DELETE' }),
+  // News
+  getNews: () => request('/news'),
+  createNews: (formData) => request('/news', { method: 'POST', body: formData }),
+  updateNews: (id, formData) => request(`/news/${id}`, { method: 'PUT', body: formData }),
+  deleteNews: (id) => request(`/news/${id}`, { method: 'DELETE' }),
+  deleteNewsDocument: (id, documentId) => request(`/news/${id}/documents/${documentId}`, { method: 'DELETE' }),
+  downloadNewsDocument: (id, document) => downloadProtectedFile(`/news/${id}/documents/${document.id}/download`, document.filename),
+  getAssetUrl: (storedPath) => storedPath ? `${API_URL.replace(/\/api$/, '')}${storedPath}` : '',
 
   // Chat
   getChatRooms: () => request('/chat/rooms'),

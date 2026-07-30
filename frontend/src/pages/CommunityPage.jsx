@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  ChevronRight,
   Edit3,
   Globe2,
   LockKeyhole,
@@ -240,45 +241,56 @@ const CommunityPage = () => {
   const renderCommunityCard = (community) => {
     const PrivacyIcon =
       community.privacy_type === "public" ? Globe2 : LockKeyhole;
-    const ownershipLabel =
-      Number(community.created_by) === Number(user?.id)
-        ? "Owner"
-        : community.is_member
-          ? "Joined"
-          : community.category;
+    const isOwner = Number(community.created_by) === Number(user?.id);
+    const membershipState = isOwner
+      ? "owner"
+      : community.is_member
+        ? "joined"
+        : "available";
+    const membershipLabel = isOwner
+      ? "Owned by you"
+      : community.is_member
+        ? "Joined"
+        : "View community";
+    const accessLabel =
+      community.privacy_type === "institution"
+        ? "Institution only"
+        : community.privacy_type === "private"
+          ? "Private"
+          : "Public";
+    const memberCount = Number(community.member_count) || 0;
 
     return (
       <button
-        className="portal-resource-card"
+        className="community-directory-card"
         key={community.id}
         onClick={() => openCommunity(community)}
       >
-        <span className="portal-resource-card__head">
-          <span className="portal-resource-icon">
-            <Users />
+        <span className="community-directory-card__body">
+          <span className="community-directory-card__meta">
+            <span className="community-category">
+              {community.category || "Community"}
+            </span>
+            <span>
+              <PrivacyIcon /> {accessLabel}
+            </span>
+          </span>
+          <strong>{community.name}</strong>
+          <span className="community-directory-card__description">
+            {community.description ||
+              "A focused place for academic exchange and collaboration."}
+          </span>
+        </span>
+        <span className="community-directory-card__footer">
+          <span>
+            <Users /> {memberCount} {memberCount === 1 ? "member" : "members"}
           </span>
           <span
-            className={
-              community.is_member
-                ? "portal-badge portal-badge--joined"
-                : "portal-badge"
-            }
+            className={`community-membership community-membership--${membershipState}`}
           >
-            {ownershipLabel}
+            {membershipLabel}
           </span>
-        </span>
-        <strong>{community.name}</strong>
-        <span className="portal-resource-card__copy portal-resource-card__copy--clamped">
-          {community.description ||
-            "A focused place for academic exchange and collaboration."}
-        </span>
-        <span className="portal-resource-card__footer">
-          <span>
-            <Users /> {community.member_count || 0}
-          </span>
-          <span>
-            <PrivacyIcon /> {community.privacy_type || "public"}
-          </span>
+          <ChevronRight />
         </span>
       </button>
     );
@@ -645,24 +657,28 @@ const CommunityPage = () => {
 
       {invitations.length > 0 && (
         <section className="portal-invitations">
-          <div>
+          <div className="portal-invitations__intro">
             <p className="portal-eyebrow">You’re invited</p>
             <h2>New communities are waiting for you</h2>
           </div>
-          {invitations.map((invite) => (
-            <div key={invite.id}>
-              <span>
-                <strong>{invite.community_name}</strong>
-                <small>Invited by {invite.inviter_name}</small>
-              </span>
-              <button onClick={() => respond(invite.id, "reject")}>
-                Decline
-              </button>
-              <button onClick={() => respond(invite.id, "accept")}>
-                Accept
-              </button>
-            </div>
-          ))}
+          <div className="portal-invitations__list">
+            {invitations.map((invite) => (
+              <article className="portal-invitation-row" key={invite.id}>
+                <span className="portal-invitation-row__details">
+                  <strong>{invite.community_name}</strong>
+                  <small>Invited by {invite.inviter_name}</small>
+                </span>
+                <span className="portal-invitation-row__actions">
+                  <button onClick={() => respond(invite.id, "reject")}>
+                    Decline
+                  </button>
+                  <button onClick={() => respond(invite.id, "accept")}>
+                    Accept
+                  </button>
+                </span>
+              </article>
+            ))}
+          </div>
         </section>
       )}
 
@@ -674,7 +690,10 @@ const CommunityPage = () => {
             placeholder="Search by name, topic, or description"
             label="Search communities"
           />
-          <div className="portal-filter-row" aria-label="Community categories">
+          <div
+            className="community-filter-row"
+            aria-label="Community categories"
+          >
             {categories.map((item) => (
               <button
                 key={item}
@@ -697,13 +716,12 @@ const CommunityPage = () => {
             >
               <div className="portal-group-heading">
                 <div>
-                  <p className="portal-eyebrow">Owned by you</p>
                   <h2 id="created-communities-heading">My communities</h2>
                 </div>
                 <span>{groupedCommunities.created.length}</span>
               </div>
               {groupedCommunities.created.length ? (
-                <div className="portal-card-grid">
+                <div className="community-card-grid">
                   {groupedCommunities.created.map(renderCommunityCard)}
                 </div>
               ) : (
@@ -719,13 +737,12 @@ const CommunityPage = () => {
             >
               <div className="portal-group-heading">
                 <div>
-                  <p className="portal-eyebrow">Your network</p>
                   <h2 id="joined-communities-heading">Joined communities</h2>
                 </div>
                 <span>{groupedCommunities.joined.length}</span>
               </div>
               {groupedCommunities.joined.length ? (
-                <div className="portal-card-grid">
+                <div className="community-card-grid">
                   {groupedCommunities.joined.map(renderCommunityCard)}
                 </div>
               ) : (
@@ -741,7 +758,6 @@ const CommunityPage = () => {
             >
               <div className="portal-group-heading">
                 <div>
-                  <p className="portal-eyebrow">Discover more</p>
                   <h2 id="available-communities-heading">
                     Available communities
                   </h2>
@@ -749,7 +765,7 @@ const CommunityPage = () => {
                 <span>{groupedCommunities.available.length}</span>
               </div>
               {groupedCommunities.available.length ? (
-                <div className="portal-card-grid">
+                <div className="community-card-grid">
                   {groupedCommunities.available.map(renderCommunityCard)}
                 </div>
               ) : (

@@ -33,7 +33,7 @@ const Navbar = ({ setMobileOpen, onSearch, searchValue }) => {
             </div>
             <input
               type="text"
-              placeholder="Search researchers, projects, events..."
+              placeholder="Search people, projects, events, news..."
               value={searchValue}
               onChange={(e) => onSearch(e.target.value)}
               className="w-full pl-11 pr-4 py-2.5 border rounded-2xl text-sm placeholder-slate-500 focus:outline-none transition-all duration-300 shadow-sm font-medium bg-slate-50 border-slate-300 text-slate-900 focus:border-blue-300 focus:bg-white focus:ring-[3px] focus:ring-blue-600/10"

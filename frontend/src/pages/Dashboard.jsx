@@ -5,7 +5,7 @@ import {
   Users, 
   FolderGit2, 
   Calendar, 
-  BookOpen, 
+  Newspaper,
   PlusCircle, 
   ExternalLink,
   ArrowRight,
@@ -29,14 +29,14 @@ const Dashboard = ({ setCurrentTab }) => {
           api.getProjects(),
           api.getEvents(),
           api.getCommunities(),
-          api.getResearch()
+          api.getNews()
         ]);
         const joinedComms = commRes.communities?.filter(c => c.is_member).length || 0;
         setStats({
           communities: joinedComms,
           projects: projRes.projects?.length || 0,
           events: eventRes.events?.length || 0,
-          papers: paperRes.papers?.length || 0
+          papers: paperRes.news?.length || 0
         });
         setRecentProjects(projRes.projects?.slice(0, 3) || []);
         setUpcomingEvents(eventRes.events?.slice(0, 3) || []);
@@ -53,7 +53,7 @@ const Dashboard = ({ setCurrentTab }) => {
     { title: 'Communities',     count: stats.communities, icon: Users,       tab: 'communities', colorClass: 'text-blue-600', bgClass: 'bg-blue-50', borderClass: 'border-blue-200', hoverBorder: 'hover:border-blue-200', shadowClass: 'hover:shadow-[0_12px_28px_-8px_rgba(37,99,235,0.25)]' },
     { title: 'Active Projects', count: stats.projects,    icon: FolderGit2,  tab: 'projects',    colorClass: 'text-violet-600', bgClass: 'bg-violet-50', borderClass: 'border-violet-200', hoverBorder: 'hover:border-violet-200', shadowClass: 'hover:shadow-[0_12px_28px_-8px_rgba(124,58,237,0.25)]' },
     { title: 'Upcoming Events', count: stats.events,      icon: Calendar,    tab: 'events',      colorClass: 'text-cyan-600', bgClass: 'bg-cyan-50', borderClass: 'border-cyan-200', hoverBorder: 'hover:border-cyan-200', shadowClass: 'hover:shadow-[0_12px_28px_-8px_rgba(8,145,178,0.25)]' },
-    { title: 'Research Papers', count: stats.papers,      icon: BookOpen,    tab: 'research',    colorClass: 'text-blue-600', bgClass: 'bg-blue-50', borderClass: 'border-blue-200', hoverBorder: 'hover:border-blue-200', shadowClass: 'hover:shadow-[0_12px_28px_-8px_rgba(37,99,235,0.25)]' },
+    { title: 'Latest News',     count: stats.papers,      icon: Newspaper,   tab: 'news',        colorClass: 'text-blue-600', bgClass: 'bg-blue-50', borderClass: 'border-blue-200', hoverBorder: 'hover:border-blue-200', shadowClass: 'hover:shadow-[0_12px_28px_-8px_rgba(37,99,235,0.25)]' },
   ];
 
   return (

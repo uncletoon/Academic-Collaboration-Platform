@@ -27,10 +27,14 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Avatars are public profile assets. Project and research files use authenticated download routes.
+// Avatars and public-news imagery are public assets. Documents use authenticated routes.
 app.use(
   "/uploads/avatars",
   express.static(path.join(__dirname, "..", "uploads", "avatars")),
+);
+app.use(
+  "/uploads/news/images",
+  express.static(path.join(__dirname, "..", "uploads", "news", "images")),
 );
 
 // Routes mapping

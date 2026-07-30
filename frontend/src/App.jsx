@@ -12,7 +12,7 @@ import Dashboard from './pages/Dashboard';
 import Communities from './pages/CommunityPage';
 import Projects from './pages/ProjectsPage';
 import Events from './pages/EventsPage';
-import Research from './pages/Research';
+import News from './pages/News';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
@@ -22,7 +22,7 @@ import Home from './pages/Home';
 const AppContent = () => {
   const { user, loading } = useAuth();
   const getPathTab = () => {
-    const path = window.location.pathname.replace('/', '');
+    const path = window.location.pathname.split('/').filter(Boolean)[0];
     return path || 'home';
   };
 
@@ -54,6 +54,10 @@ const AppContent = () => {
   // Switch tabs cleanly resetting searches
   const handleTabChange = (tabId) => {
     setSearchValue('');
+    if (currentTab === tabId && window.location.pathname !== '/' + tabId) {
+      window.location.assign('/' + tabId);
+      return;
+    }
     if (currentTab !== tabId) {
       window.history.pushState(null, '', '/' + tabId);
       setCurrentTab(tabId);
@@ -92,6 +96,11 @@ const AppContent = () => {
     );
   }
 
+  // News stories open as independent, read-only pages without the application shell.
+  if (/^\/news\/\d+\/?$/.test(window.location.pathname)) {
+    return <News />;
+  }
+
   // Logged In Views
   const renderTabContent = () => {
     switch (currentTab) {
@@ -105,8 +114,9 @@ const AppContent = () => {
         return <Projects />;
       case 'events':
         return <Events />;
+      case 'news':
       case 'research':
-        return <Research />;
+        return <News />;
       case 'chat':
         return <Chat />;
       case 'profile':

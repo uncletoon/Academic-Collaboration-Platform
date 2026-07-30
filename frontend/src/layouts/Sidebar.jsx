@@ -6,7 +6,7 @@ import {
   Users,
   FolderGit2,
   CalendarDays,
-  BookOpen,
+  Newspaper,
   MessageSquareCode,
   ShieldAlert,
   UserCircle2,
@@ -24,7 +24,7 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
     { id: 'communities', label: 'Communities', icon: Users },
     { id: 'projects', label: 'Collaboration', icon: FolderGit2 },
     { id: 'events', label: 'Events', icon: CalendarDays },
-    { id: 'research', label: 'Research', icon: BookOpen },
+    { id: 'news', label: 'News', icon: Newspaper },
     { id: 'chat', label: 'Discussions', icon: MessageSquareCode },
   ];
 

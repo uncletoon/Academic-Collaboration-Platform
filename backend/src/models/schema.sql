@@ -213,15 +213,26 @@ CREATE TABLE IF NOT EXISTS event_registrations (
     PRIMARY KEY (event_id, user_id)
 );
 
--- 14. Research Repository
-CREATE TABLE IF NOT EXISTS research_repository (
+-- 14. Public News
+CREATE TABLE IF NOT EXISTS news (
     id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    abstract TEXT,
-    authors VARCHAR(255) NOT NULL,
-    filepath VARCHAR(255) NOT NULL,
-    uploaded_by INT REFERENCES users(id) ON DELETE SET NULL,
-    institution_id INT REFERENCES institutions(id) ON DELETE SET NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL DEFAULT 'Other',
+    feature_image VARCHAR(500) NOT NULL,
+    external_link VARCHAR(1000),
+    created_by INT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS news_documents (
+    id SERIAL PRIMARY KEY,
+    news_id INT NOT NULL REFERENCES news(id) ON DELETE CASCADE,
+    filename VARCHAR(255) NOT NULL,
+    filepath VARCHAR(500) NOT NULL,
+    mime_type VARCHAR(150),
+    file_size BIGINT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowRight, BookOpen, CalendarDays, CheckCircle2, FolderKanban,
+  ArrowRight, Newspaper, CalendarDays, CheckCircle2, FolderKanban,
   MessageCircleMore, Network, Sparkles, Users, UserRoundSearch
 } from 'lucide-react';
 import api from '../services/api';
@@ -9,19 +9,19 @@ import { PageIntro, StatPill } from '../components/PortalPrimitives';
 
 const Home = ({ setCurrentTab }) => {
   const { user } = useAuth();
-  const [data, setData] = useState({ communities: [], projects: [], events: [], papers: [] });
+  const [data, setData] = useState({ communities: [], projects: [], events: [], news: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([api.getCommunities(), api.getProjects(), api.getEvents(), api.getResearch()])
-      .then(([communities, projects, events, papers]) => {
+    Promise.allSettled([api.getCommunities(), api.getProjects(), api.getEvents(), api.getNews()])
+      .then(([communities, projects, events, news]) => {
         if (!active) return;
         setData({
           communities: communities.value?.communities || [],
           projects: projects.value?.projects || [],
           events: events.value?.events || [],
-          papers: papers.value?.papers || [],
+          news: news.value?.news || [],
         });
       })
       .finally(() => active && setLoading(false));
@@ -94,7 +94,7 @@ const Home = ({ setCurrentTab }) => {
           <StatPill icon={Users} value={loading ? '—' : data.communities.length} label="Communities" />
           <StatPill icon={FolderKanban} value={loading ? '—' : data.projects.length} label="Your projects" tone="cyan" />
           <StatPill icon={CalendarDays} value={loading ? '—' : upcoming.length} label="Upcoming events" tone="amber" />
-          <StatPill icon={BookOpen} value={loading ? '—' : data.papers.length} label="Research papers" tone="violet" />
+          <StatPill icon={Newspaper} value={loading ? '—' : data.news.length} label="News stories" tone="violet" />
         </div>
       </section>
 

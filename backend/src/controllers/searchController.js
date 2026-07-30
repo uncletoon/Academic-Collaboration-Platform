@@ -1,6 +1,6 @@
 const { query } = require('../config/db');
 
-// Global Search engine across users, communities, projects, research, events
+// Global Search engine across users, communities, projects, news, events
 async function globalSearch(req, res) {
   try {
     const searchTerm = req.query.q;
@@ -9,7 +9,7 @@ async function globalSearch(req, res) {
         users: [],
         communities: [],
         projects: [],
-        research: [],
+        news: [],
         events: []
       });
     }
@@ -58,13 +58,12 @@ async function globalSearch(req, res) {
       LIMIT 10
     `, [pattern, req.user.id, req.user.institution_id || null, req.user.role === 'admin']);
 
-    // 4. Search Research Publications
-    const researchPromise = query(`
-      SELECT rr.*, u.full_name as uploader_name, i.name as institution_name
-      FROM research_repository rr
-      LEFT JOIN users u ON rr.uploaded_by = u.id
-      LEFT JOIN institutions i ON rr.institution_id = i.id
-      WHERE rr.title ILIKE $1 OR rr.abstract ILIKE $1 OR rr.authors ILIKE $1
+    // 4. Search published news
+    const newsPromise = query(`
+      SELECT n.*, u.full_name as author_name
+      FROM news n
+      LEFT JOIN users u ON n.created_by = u.id
+      WHERE n.title ILIKE $1 OR n.description ILIKE $1 OR n.category ILIKE $1
       LIMIT 10
     `, [pattern]);
 
@@ -79,11 +78,11 @@ async function globalSearch(req, res) {
     `, [pattern]);
 
     // Execute all queries in parallel
-    const [usersRes, communitiesRes, projectsRes, researchRes, eventsRes] = await Promise.all([
+    const [usersRes, communitiesRes, projectsRes, newsRes, eventsRes] = await Promise.all([
       usersPromise,
       communitiesPromise,
       projectsPromise,
-      researchPromise,
+      newsPromise,
       eventsPromise
     ]);
 
@@ -91,7 +90,7 @@ async function globalSearch(req, res) {
       users: usersRes.rows,
       communities: communitiesRes.rows,
       projects: projectsRes.rows,
-      research: researchRes.rows,
+      news: newsRes.rows,
       events: eventsRes.rows
     });
   } catch (error) {

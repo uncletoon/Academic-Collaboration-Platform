@@ -3,7 +3,7 @@ const { query } = require('../config/db');
 // Get admin stats / dashboard reports
 async function getAdminStats(req, res) {
   try {
-    // Collect counts for users, communities, projects, events, research, etc.
+    // Collect counts for users, communities, projects, events, news, etc.
     const userStats = await query(`
       SELECT 
         COUNT(*)::int as total_users,
@@ -20,7 +20,7 @@ async function getAdminStats(req, res) {
         (SELECT COUNT(*) FROM academic_communities)::int as total_communities,
         (SELECT COUNT(*) FROM projects)::int as total_projects,
         (SELECT COUNT(*) FROM events)::int as total_events,
-        (SELECT COUNT(*) FROM research_repository)::int as total_research
+        (SELECT COUNT(*) FROM news)::int as total_news
     `);
 
     return res.status(200).json({

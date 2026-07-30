@@ -11,7 +11,7 @@ const metaCtrl = require('../controllers/institutionController');
 const commCtrl = require('../controllers/communityController');
 const projCtrl = require('../controllers/projectController');
 const eventCtrl = require('../controllers/eventController');
-const researchCtrl = require('../controllers/researchController');
+const newsCtrl = require('../controllers/newsController');
 const chatCtrl = require('../controllers/chatController');
 const notifCtrl = require('../controllers/notificationController');
 const searchCtrl = require('../controllers/searchController');
@@ -78,11 +78,17 @@ router.put('/events/:id', eventCtrl.updateEvent);
 router.post('/events/:id/register', eventCtrl.toggleEventRegistration);
 router.delete('/events/:id', eventCtrl.deleteEvent);
 
-// --- 6. Research Repository Routes ---
-router.get('/research', researchCtrl.getAllResearch);
-router.post('/research', upload.single('researchPaper'), researchCtrl.uploadResearchPaper);
-router.get('/research/:id/download', researchCtrl.downloadResearchPaper);
-router.delete('/research/:id', researchCtrl.deleteResearchPaper);
+// --- 6. Public News Routes (all mutations are administrator-only) ---
+const newsUpload = upload.fields([
+  { name: 'featureImage', maxCount: 1 },
+  { name: 'supportiveDocuments', maxCount: 8 },
+]);
+router.get('/news', newsCtrl.getAllNews);
+router.post('/news', authorizeRoles('admin'), newsUpload, newsCtrl.createNews);
+router.put('/news/:id', authorizeRoles('admin'), newsUpload, newsCtrl.updateNews);
+router.delete('/news/:id', authorizeRoles('admin'), newsCtrl.deleteNews);
+router.delete('/news/:id/documents/:documentId', authorizeRoles('admin'), newsCtrl.deleteNewsDocument);
+router.get('/news/:id/documents/:documentId/download', newsCtrl.downloadNewsDocument);
 
 // --- 7. Real-Time Chat Routes ---
 router.get('/chat/rooms', chatCtrl.getChatRooms);
