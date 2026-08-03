@@ -481,7 +481,12 @@ async function toggleLikePost(req, res) {
     if (likeCheck.rowCount > 0) {
       // Unlike
       await query('DELETE FROM likes WHERE post_id = $1 AND user_id = $2', [postId, userId]);
-      return res.status(200).json({ message: 'Unliked post', isLiked: false });
+      const countResult = await query('SELECT COUNT(*)::int AS like_count FROM likes WHERE post_id = $1', [postId]);
+      return res.status(200).json({
+        message: 'Unliked post',
+        isLiked: false,
+        likeCount: countResult.rows[0].like_count
+      });
     } else {
       // Like
       await query('INSERT INTO likes (post_id, user_id) VALUES ($1, $2)', [postId, userId]);
@@ -496,7 +501,12 @@ async function toggleLikePost(req, res) {
           link: `/communities/${post.community_id}`
         });
       }
-      return res.status(200).json({ message: 'Liked post', isLiked: true });
+      const countResult = await query('SELECT COUNT(*)::int AS like_count FROM likes WHERE post_id = $1', [postId]);
+      return res.status(200).json({
+        message: 'Liked post',
+        isLiked: true,
+        likeCount: countResult.rows[0].like_count
+      });
     }
   } catch (error) {
     console.error('Like toggle error:', error);
@@ -538,7 +548,7 @@ async function getPostComments(req, res) {
 // Add Comment
 async function addComment(req, res) {
   try {
-    const { content } = req.body;
+    const content = req.body.content?.trim();
     const postId = parseInt(req.params.postId);
     const userId = req.user.id;
 

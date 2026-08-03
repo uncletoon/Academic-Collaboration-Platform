@@ -4,12 +4,14 @@ import {
   ChevronRight,
   Edit3,
   Globe2,
+  Heart,
   LockKeyhole,
   Mail,
   MailPlus,
   MessageSquareText,
   Plus,
   ShieldCheck,
+  Send,
   Trash2,
   Users,
   UserRoundPlus,
@@ -40,6 +42,12 @@ const CommunityPage = () => {
   const [selected, setSelected] = useState(null);
   const [members, setMembers] = useState([]);
   const [posts, setPosts] = useState([]);
+  const [commentsByPost, setCommentsByPost] = useState({});
+  const [expandedComments, setExpandedComments] = useState({});
+  const [commentDrafts, setCommentDrafts] = useState({});
+  const [loadingComments, setLoadingComments] = useState({});
+  const [submittingComments, setSubmittingComments] = useState({});
+  const [likingPosts, setLikingPosts] = useState({});
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [loading, setLoading] = useState(true);
@@ -97,6 +105,9 @@ const CommunityPage = () => {
       setSelected(details.community);
       setMembers(details.members || []);
       setPosts(communityPosts.posts || []);
+      setCommentsByPost({});
+      setExpandedComments({});
+      setCommentDrafts({});
       window.history.replaceState(null, "", `/communities?id=${community.id}`);
     } catch (err) {
       setError(err.message);
@@ -141,6 +152,112 @@ const CommunityPage = () => {
       setPosts(result.posts || []);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const toggleLike = async (item) => {
+    if (likingPosts[item.id]) return;
+
+    const wasLiked = Boolean(item.is_liked);
+    const previousCount = Number(item.like_count) || 0;
+    setError("");
+    setLikingPosts((current) => ({ ...current, [item.id]: true }));
+    setPosts((current) =>
+      current.map((currentPost) =>
+        currentPost.id === item.id
+          ? {
+              ...currentPost,
+              is_liked: !wasLiked,
+              like_count: Math.max(0, previousCount + (wasLiked ? -1 : 1)),
+            }
+          : currentPost,
+      ),
+    );
+
+    try {
+      const result = await api.toggleLikePost(item.id);
+      setPosts((current) =>
+        current.map((currentPost) =>
+          currentPost.id === item.id
+            ? {
+                ...currentPost,
+                is_liked: result.isLiked,
+                like_count: result.likeCount,
+              }
+            : currentPost,
+        ),
+      );
+    } catch (err) {
+      setPosts((current) =>
+        current.map((currentPost) =>
+          currentPost.id === item.id
+            ? {
+                ...currentPost,
+                is_liked: wasLiked,
+                like_count: previousCount,
+              }
+            : currentPost,
+        ),
+      );
+      setError(err.message);
+    } finally {
+      setLikingPosts((current) => ({ ...current, [item.id]: false }));
+    }
+  };
+
+  const toggleComments = async (postId) => {
+    if (expandedComments[postId]) {
+      setExpandedComments((current) => ({ ...current, [postId]: false }));
+      return;
+    }
+
+    setExpandedComments((current) => ({ ...current, [postId]: true }));
+    if (Object.prototype.hasOwnProperty.call(commentsByPost, postId)) return;
+
+    setError("");
+    setLoadingComments((current) => ({ ...current, [postId]: true }));
+    try {
+      const result = await api.getPostComments(postId);
+      setCommentsByPost((current) => ({
+        ...current,
+        [postId]: result.comments || [],
+      }));
+    } catch (err) {
+      setExpandedComments((current) => ({ ...current, [postId]: false }));
+      setError(err.message);
+    } finally {
+      setLoadingComments((current) => ({ ...current, [postId]: false }));
+    }
+  };
+
+  const addComment = async (event, postId) => {
+    event.preventDefault();
+    const content = (commentDrafts[postId] || "").trim();
+    if (!content || submittingComments[postId]) return;
+
+    setError("");
+    setSubmittingComments((current) => ({ ...current, [postId]: true }));
+    try {
+      const result = await api.addComment(postId, { content });
+      setCommentsByPost((current) => ({
+        ...current,
+        [postId]: [...(current[postId] || []), result.comment],
+      }));
+      setCommentDrafts((current) => ({ ...current, [postId]: "" }));
+      setPosts((current) =>
+        current.map((currentPost) =>
+          currentPost.id === postId
+            ? {
+                ...currentPost,
+                comment_count: (Number(currentPost.comment_count) || 0) + 1,
+              }
+            : currentPost,
+        ),
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmittingComments((current) => ({ ...current, [postId]: false }));
     }
   };
 
@@ -457,16 +574,98 @@ const CommunityPage = () => {
                     <div className="portal-avatar">
                       {item.author_name?.slice(0, 1) || "A"}
                     </div>
-                    <div>
+                    <div className="portal-post__body">
                       <p className="portal-post__by">
                         {item.author_name || "Community member"} ·{" "}
                         {new Date(item.created_at).toLocaleDateString()}
                       </p>
                       <h3>{item.title}</h3>
                       <p>{item.content}</p>
-                      <span>
-                        <MessageSquareText /> {item.comment_count || 0} replies
-                      </span>
+                      <div className="portal-post__actions">
+                        <button
+                          type="button"
+                          className={item.is_liked ? "is-active" : ""}
+                          onClick={() => toggleLike(item)}
+                          disabled={likingPosts[item.id]}
+                          aria-pressed={Boolean(item.is_liked)}
+                          aria-label={`${item.is_liked ? "Unlike" : "Like"} ${item.title}`}
+                        >
+                          <Heart fill={item.is_liked ? "currentColor" : "none"} />
+                          {item.like_count || 0} {Number(item.like_count) === 1 ? "like" : "likes"}
+                        </button>
+                        <button
+                          type="button"
+                          className={expandedComments[item.id] ? "is-active" : ""}
+                          onClick={() => toggleComments(item.id)}
+                          aria-expanded={Boolean(expandedComments[item.id])}
+                          aria-controls={`post-${item.id}-comments`}
+                        >
+                          <MessageSquareText /> {item.comment_count || 0}{" "}
+                          {Number(item.comment_count) === 1 ? "reply" : "replies"}
+                        </button>
+                      </div>
+                      {expandedComments[item.id] && (
+                        <section
+                          className="portal-comments"
+                          id={`post-${item.id}-comments`}
+                          aria-label={`Comments on ${item.title}`}
+                        >
+                          {loadingComments[item.id] ? (
+                            <p className="portal-comments__status">Loading replies…</p>
+                          ) : (commentsByPost[item.id] || []).length ? (
+                            <div className="portal-comments__list">
+                              {(commentsByPost[item.id] || []).map((comment) => (
+                                <article className="portal-comment" key={comment.id}>
+                                  <span className="portal-avatar">
+                                    {comment.author_name?.slice(0, 1) || "A"}
+                                  </span>
+                                  <div>
+                                    <p className="portal-comment__by">
+                                      <strong>{comment.author_name || "Community member"}</strong>
+                                      <span>{new Date(comment.created_at).toLocaleDateString()}</span>
+                                    </p>
+                                    <p>{comment.content}</p>
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="portal-comments__status">No replies yet. Start the conversation.</p>
+                          )}
+                          <form
+                            className="portal-comment-form"
+                            onSubmit={(event) => addComment(event, item.id)}
+                          >
+                            <label className="sr-only" htmlFor={`post-${item.id}-comment-input`}>
+                              Add a reply to {item.title}
+                            </label>
+                            <textarea
+                              id={`post-${item.id}-comment-input`}
+                              rows="2"
+                              maxLength="2000"
+                              placeholder="Write a thoughtful reply…"
+                              value={commentDrafts[item.id] || ""}
+                              onChange={(event) =>
+                                setCommentDrafts((current) => ({
+                                  ...current,
+                                  [item.id]: event.target.value,
+                                }))
+                              }
+                              required
+                            />
+                            <button
+                              type="submit"
+                              disabled={
+                                submittingComments[item.id] ||
+                                !(commentDrafts[item.id] || "").trim()
+                              }
+                            >
+                              <Send />
+                              {submittingComments[item.id] ? "Posting…" : "Reply"}
+                            </button>
+                          </form>
+                        </section>
+                      )}
                     </div>
                   </article>
                 ))
