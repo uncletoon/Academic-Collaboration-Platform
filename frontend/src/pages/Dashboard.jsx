@@ -86,7 +86,7 @@ const Dashboard = ({ setCurrentTab }) => {
             <p className="text-sm font-medium text-white/80">
               {user.institution_name ? `${user.institution_name} • ` : ''}
               {user.department_name ? `${user.department_name} • ` : ''}
-              <span className="capitalize">{user.role}</span>
+              <span className="capitalize">{user.role_name || user.role}</span>
             </p>
           </div>
 

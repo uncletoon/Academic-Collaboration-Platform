@@ -28,7 +28,7 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
     { id: 'chat', label: 'Discussions', icon: MessageSquareCode },
   ];
 
-  if (user?.role === 'admin') {
+  if (['admin', 'institution_admin'].includes(user?.role)) {
     navItems.push({ id: 'admin', label: 'Admin Panel', icon: ShieldAlert });
   }
 
@@ -125,7 +125,7 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
                 {user?.full_name || 'User'}
               </p>
               <p className="text-[10px] font-semibold uppercase tracking-widest truncate">
-                {user?.role || 'Guest'}
+                {user?.role_name || user?.role || 'Guest'}
               </p>
             </div>
           </button>

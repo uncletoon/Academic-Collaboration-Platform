@@ -262,7 +262,6 @@ const Register = ({ onSwitchLogin }) => {
                     <option value="student">Student</option>
                     <option value="lecturer">Lecturer</option>
                     <option value="researcher">Researcher</option>
-                    <option value="admin">Institution Administrator</option>
                   </select>
                 </div>
               </div>

@@ -85,8 +85,8 @@ const Profile = () => {
   const getRoleBadgeColor = () => {
     switch (user?.role) {
       case 'admin': return 'bg-red-100 text-red-700 border-red-200';
+      case 'institution_admin': return 'bg-violet-100 text-violet-700 border-violet-200';
       case 'lecturer': return 'bg-amber-100 text-amber-700 border-amber-200';
-      case 'researcher': return 'bg-sky-100 text-sky-700 border-sky-200';
       default: return 'bg-blue-100 text-blue-700 border-blue-200';
     }
   };
@@ -119,7 +119,7 @@ const Profile = () => {
             <div className="flex items-center gap-2.5 flex-col sm:flex-row justify-center sm:justify-start">
               <h3 className="text-lg font-bold text-canvas-900 leading-none">{user?.full_name}</h3>
               <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded border ${getRoleBadgeColor()}`}>
-                {user?.role}
+                {user?.role_name || user?.role}
               </span>
             </div>
             <p className="text-xs font-medium">{user?.email}</p>

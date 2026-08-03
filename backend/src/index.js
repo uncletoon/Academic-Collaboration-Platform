@@ -41,6 +41,11 @@ app.use(
 const apiRouter = require("./routes/api");
 app.use("/api", apiRouter);
 
+// API consumers must always receive JSON, including for unmatched routes.
+app.use("/api", (req, res) => {
+  res.status(404).json({ message: `API route not found: ${req.method} ${req.originalUrl}` });
+});
+
 // Basic health check route
 app.get("/health", (req, res) => {
   res.status(200).json({

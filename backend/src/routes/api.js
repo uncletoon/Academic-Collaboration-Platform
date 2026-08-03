@@ -16,6 +16,7 @@ const chatCtrl = require('../controllers/chatController');
 const notifCtrl = require('../controllers/notificationController');
 const searchCtrl = require('../controllers/searchController');
 const adminCtrl = require('../controllers/adminController');
+const adminDirectoryCtrl = require('../controllers/adminDirectoryController');
 
 // --- 1. Public Metadata Routes ---
 router.get('/meta/institutions', metaCtrl.getAllInstitutions);
@@ -108,11 +109,29 @@ router.get('/search', searchCtrl.globalSearch);
 // --- 10. Administrator Dashboard Routes (Admin Access Only) ---
 // Keep authorization route-scoped so an unmatched application route returns 404
 // instead of falling through to a misleading admin-only error.
-router.get('/admin/stats', authorizeRoles('admin'), adminCtrl.getAdminStats);
-router.get('/admin/users', authorizeRoles('admin'), adminCtrl.getAllUsersDetailed);
-router.put('/admin/users/:userId/status', authorizeRoles('admin'), adminCtrl.toggleUserStatus);
-router.put('/admin/users/:userId/role', authorizeRoles('admin'), adminCtrl.changeUserRole);
-router.delete('/admin/communities/:id', authorizeRoles('admin'), adminCtrl.adminDeleteCommunity);
-router.delete('/admin/events/:id', authorizeRoles('admin'), adminCtrl.adminDeleteEvent);
+const authorizeAdminPanel = authorizeRoles('admin', 'institution_admin');
+router.get('/admin/stats', authorizeAdminPanel, adminCtrl.getAdminStats);
+router.get('/admin/users', authorizeAdminPanel, adminCtrl.getAllUsersDetailed);
+router.post('/admin/users', authorizeAdminPanel, adminCtrl.createUser);
+router.put('/admin/users/:userId', authorizeAdminPanel, adminCtrl.updateUser);
+router.put('/admin/users/:userId/status', authorizeAdminPanel, adminCtrl.toggleUserStatus);
+router.put('/admin/users/:userId/role', authorizeAdminPanel, adminCtrl.changeUserRole);
+router.get('/admin/institutions', authorizeAdminPanel, adminDirectoryCtrl.getInstitutions);
+router.post('/admin/institutions', authorizeRoles('admin'), adminDirectoryCtrl.createInstitution);
+router.put('/admin/institutions/:id', authorizeRoles('admin'), adminDirectoryCtrl.updateInstitution);
+router.delete('/admin/institutions/:id', authorizeRoles('admin'), adminDirectoryCtrl.deleteInstitution);
+router.get('/admin/departments', authorizeAdminPanel, adminDirectoryCtrl.getDepartments);
+router.post('/admin/departments', authorizeAdminPanel, adminDirectoryCtrl.createDepartment);
+router.put('/admin/departments/:id', authorizeAdminPanel, adminDirectoryCtrl.updateDepartment);
+router.delete('/admin/departments/:id', authorizeAdminPanel, adminDirectoryCtrl.deleteDepartment);
+router.get('/admin/roles', authorizeAdminPanel, adminDirectoryCtrl.getRoles);
+router.post('/admin/roles', authorizeAdminPanel, adminDirectoryCtrl.createRole);
+router.put('/admin/roles/:id', authorizeAdminPanel, adminDirectoryCtrl.updateRole);
+router.delete('/admin/roles/:id', authorizeAdminPanel, adminDirectoryCtrl.deleteRole);
+router.get('/admin/audit-logs', authorizeAdminPanel, adminDirectoryCtrl.getAuditLogs);
+router.get('/admin/communities', authorizeAdminPanel, adminCtrl.getModerationCommunities);
+router.get('/admin/events', authorizeAdminPanel, adminCtrl.getModerationEvents);
+router.delete('/admin/communities/:id', authorizeAdminPanel, adminCtrl.adminDeleteCommunity);
+router.delete('/admin/events/:id', authorizeAdminPanel, adminCtrl.adminDeleteEvent);
 
 module.exports = router;

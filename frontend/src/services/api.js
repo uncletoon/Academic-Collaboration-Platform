@@ -1,4 +1,4 @@
-const API_URL = 'http://127.0.0.1:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api';
 
 // Create helper to fetch token from localStorage
 const getAuthToken = () => localStorage.getItem('token');
@@ -23,12 +23,28 @@ const request = async (endpoint, options = {}) => {
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers,
+    cache: options.cache || 'no-store',
   });
 
-  const data = await response.json();
+  const contentType = response.headers.get('content-type') || '';
+  const responseText = await response.text();
+  let data = {};
+  if (responseText && contentType.includes('application/json')) {
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      throw new Error(`The server returned malformed JSON (${response.status}).`);
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(data.message || 'Something went wrong');
+    const error = new Error(data.message || `API request failed with status ${response.status}. Please restart the backend if routes were recently updated.`);
+    error.status = response.status;
+    throw error;
+  }
+
+  if (responseText && !contentType.includes('application/json')) {
+    throw new Error('The API returned an unexpected response format. Please restart the backend server.');
   }
 
   return data;
@@ -149,8 +165,25 @@ const api = {
   // Admin Dashboard
   getAdminStats: () => request('/admin/stats'),
   getAdminUsers: () => request('/admin/users'),
+  createAdminUser: (data) => request('/admin/users', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdminUser: (id, data) => request(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleUserStatus: (userId) => request(`/admin/users/${userId}/status`, { method: 'PUT' }),
-  changeUserRole: (userId, newRole) => request(`/admin/users/${userId}/role`, { method: 'PUT', body: JSON.stringify({ newRole }) }),
+  changeUserRole: (userId, roleId) => request(`/admin/users/${userId}/role`, { method: 'PUT', body: JSON.stringify({ roleId }) }),
+  getAdminInstitutions: () => request('/admin/institutions'),
+  createAdminInstitution: (data) => request('/admin/institutions', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdminInstitution: (id, data) => request(`/admin/institutions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminInstitution: (id) => request(`/admin/institutions/${id}`, { method: 'DELETE' }),
+  getAdminDepartments: () => request('/admin/departments'),
+  createAdminDepartment: (data) => request('/admin/departments', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdminDepartment: (id, data) => request(`/admin/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminDepartment: (id) => request(`/admin/departments/${id}`, { method: 'DELETE' }),
+  getAdminRoles: () => request('/admin/roles'),
+  createAdminRole: (data) => request('/admin/roles', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdminRole: (id, data) => request(`/admin/roles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminRole: (id) => request(`/admin/roles/${id}`, { method: 'DELETE' }),
+  getAdminAuditLogs: () => request('/admin/audit-logs'),
+  getAdminCommunities: () => request('/admin/communities'),
+  getAdminEvents: () => request('/admin/events'),
   adminDeleteCommunity: (id) => request(`/admin/communities/${id}`, { method: 'DELETE' }),
   adminDeleteEvent: (id) => request(`/admin/events/${id}`, { method: 'DELETE' }),
 };

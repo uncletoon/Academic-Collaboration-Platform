@@ -18,13 +18,73 @@ CREATE TABLE IF NOT EXISTS departments (
     CONSTRAINT unique_dept_per_inst UNIQUE (name, institution_id)
 );
 
+-- Administrative role catalogue. A custom role inherits one of the platform's
+-- established access levels so existing authorization rules remain predictable.
+CREATE TABLE IF NOT EXISTS user_roles (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    role_key VARCHAR(100) NOT NULL,
+    description TEXT,
+    base_role VARCHAR(50) NOT NULL CHECK (base_role IN ('student', 'lecturer', 'institution_admin', 'admin')),
+    color VARCHAR(20) NOT NULL DEFAULT '#2563EB',
+    is_system BOOLEAN NOT NULL DEFAULT FALSE,
+    institution_id INT REFERENCES institutions(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='user_roles' AND column_name='institution_id') THEN
+        ALTER TABLE user_roles ADD COLUMN institution_id INT REFERENCES institutions(id) ON DELETE CASCADE;
+    END IF;
+END
+$$;
+
+ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS user_roles_name_key;
+ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS user_roles_role_key_key;
+ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS user_roles_base_role_check;
+UPDATE user_roles SET base_role = 'lecturer', is_system = FALSE WHERE base_role = 'researcher' OR role_key = 'researcher';
+UPDATE user_roles
+SET name = 'Institution Administrator', role_key = 'institution_admin', base_role = 'institution_admin', is_system = TRUE
+WHERE role_key IN ('institution_admin', 'institution-admin')
+   OR (LOWER(name) = 'institution administrator' AND institution_id IS NULL);
+UPDATE user_roles SET name = 'System Administrator' WHERE role_key = 'admin' AND institution_id IS NULL;
+ALTER TABLE user_roles ADD CONSTRAINT user_roles_base_role_check
+    CHECK (base_role IN ('student', 'lecturer', 'institution_admin', 'admin'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_global_role_name
+    ON user_roles (LOWER(name)) WHERE institution_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS unique_institution_role_name
+    ON user_roles (institution_id, LOWER(name)) WHERE institution_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS unique_global_role_key
+    ON user_roles (role_key) WHERE institution_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS unique_institution_role_key
+    ON user_roles (institution_id, role_key) WHERE institution_id IS NOT NULL;
+
+INSERT INTO user_roles (name, role_key, description, base_role, color, is_system, institution_id)
+SELECT seed.name, seed.role_key, seed.description, seed.base_role, seed.color, seed.is_system, NULL
+FROM (VALUES
+    ('Student', 'student', 'Learns, joins communities, and collaborates on academic work.', 'student', '#2563EB', TRUE),
+    ('Lecturer', 'lecturer', 'Teaches, leads academic activities, and schedules events.', 'lecturer', '#D97706', TRUE),
+    ('Researcher', 'researcher', 'Research-focused title with lecturer collaboration access.', 'lecturer', '#0284C7', FALSE),
+    ('Institution Administrator', 'institution_admin', 'Administrative access restricted to one institution.', 'institution_admin', '#7C3AED', TRUE),
+    ('System Administrator', 'admin', 'Unrestricted system administration and moderation access.', 'admin', '#DC2626', TRUE)
+) AS seed(name, role_key, description, base_role, color, is_system)
+WHERE NOT EXISTS (
+    SELECT 1 FROM user_roles existing
+    WHERE existing.role_key = seed.role_key AND existing.institution_id IS NULL
+);
+
 -- 3. Users
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('student', 'lecturer', 'researcher', 'admin')),
+    role VARCHAR(50) NOT NULL CHECK (role IN ('student', 'lecturer', 'institution_admin', 'admin')),
+    role_id INT REFERENCES user_roles(id) ON DELETE SET NULL,
     institution_id INT REFERENCES institutions(id) ON DELETE SET NULL,
     department_id INT REFERENCES departments(id) ON DELETE SET NULL,
     bio TEXT,
@@ -32,6 +92,57 @@ CREATE TABLE IF NOT EXISTS users (
     status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='users' AND column_name='role_id') THEN
+        ALTER TABLE users ADD COLUMN role_id INT REFERENCES user_roles(id) ON DELETE SET NULL;
+    END IF;
+END
+$$;
+
+UPDATE users u
+SET role_id = r.id
+FROM user_roles r
+WHERE u.role_id IS NULL AND r.role_key = u.role AND r.institution_id IS NULL;
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+UPDATE users u SET role = 'institution_admin'
+FROM user_roles r
+WHERE u.role_id = r.id AND r.base_role = 'institution_admin';
+UPDATE users SET role = 'lecturer' WHERE role = 'researcher';
+ALTER TABLE users ADD CONSTRAINT users_role_check
+    CHECK (role IN ('student', 'lecturer', 'institution_admin', 'admin'));
+
+-- Immutable accountability trail for sensitive administrator actions.
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    id BIGSERIAL PRIMARY KEY,
+    actor_id INT REFERENCES users(id) ON DELETE SET NULL,
+    action VARCHAR(80) NOT NULL,
+    entity_type VARCHAR(80) NOT NULL,
+    entity_id VARCHAR(80),
+    summary TEXT NOT NULL,
+    institution_id INT REFERENCES institutions(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='admin_audit_logs' AND column_name='institution_id') THEN
+        ALTER TABLE admin_audit_logs ADD COLUMN institution_id INT REFERENCES institutions(id) ON DELETE SET NULL;
+    END IF;
+END
+$$;
+
+UPDATE admin_audit_logs logs
+SET institution_id = actor.institution_id
+FROM users actor
+WHERE logs.institution_id IS NULL
+  AND logs.actor_id = actor.id
+  AND actor.role = 'institution_admin'
+  AND actor.institution_id IS NOT NULL;
 
 -- 4. Academic Communities
 CREATE TABLE IF NOT EXISTS academic_communities (

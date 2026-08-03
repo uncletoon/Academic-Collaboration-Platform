@@ -30,6 +30,21 @@ async function register(req, res) {
       return res.status(400).json({ message: 'Email, password, full name, and role are required.' });
     }
 
+    // Privileged roles are assigned only from the protected administrator panel.
+    if (!['student', 'lecturer', 'researcher'].includes(role)) {
+      return res.status(400).json({ message: 'Please select a valid public academic role.' });
+    }
+
+    const selectedRole = await query(
+      `SELECT id, name, base_role, color FROM user_roles
+       WHERE role_key = $1 AND institution_id IS NULL AND base_role IN ('student', 'lecturer')
+       LIMIT 1`,
+      [role],
+    );
+    if (!selectedRole.rowCount) {
+      return res.status(400).json({ message: 'The selected academic role is not available.' });
+    }
+
     // Check if user already exists
     const userExist = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (userExist.rowCount > 0) {
@@ -41,22 +56,25 @@ async function register(req, res) {
 
     // Save to Database
     const insertQuery = `
-      INSERT INTO users (email, password_hash, full_name, role, institution_id, department_id, bio)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, email, full_name, role, institution_id, department_id, bio, status, created_at
+      INSERT INTO users (email, password_hash, full_name, role, role_id, institution_id, department_id, bio)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, email, full_name, role, role_id, institution_id, department_id, bio, status, created_at
     `;
     
     const result = await query(insertQuery, [
       email.toLowerCase(),
       passwordHash,
       fullName,
-      role,
+      selectedRole.rows[0].base_role,
+      selectedRole.rows[0].id,
       institutionId ? parseInt(institutionId) : null,
       departmentId ? parseInt(departmentId) : null,
       bio || ''
     ]);
 
     const newUser = result.rows[0];
+    newUser.role_name = selectedRole.rows[0].name;
+    newUser.role_color = selectedRole.rows[0].color;
     const token = generateToken(newUser);
 
     return res.status(201).json({
@@ -81,10 +99,13 @@ async function login(req, res) {
 
     // Find User
     const selectQuery = `
-      SELECT u.*, i.name as institution_name, d.name as department_name 
+      SELECT u.*, i.name as institution_name, d.name as department_name,
+             COALESCE(r.name, INITCAP(u.role)) AS role_name,
+             COALESCE(r.color, '#2563EB') AS role_color
       FROM users u
       LEFT JOIN institutions i ON u.institution_id = i.id
       LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN user_roles r ON u.role_id = r.id
       WHERE u.email = $1
     `;
     const result = await query(selectQuery, [email.toLowerCase()]);
@@ -128,11 +149,14 @@ async function getProfile(req, res) {
     const userId = req.params.id ? parseInt(req.params.id) : req.user.id;
 
     const selectQuery = `
-      SELECT u.id, u.email, u.full_name, u.role, u.institution_id, u.department_id, u.bio, u.avatar_url, u.status, u.created_at,
-             i.name as institution_name, d.name as department_name
+      SELECT u.id, u.email, u.full_name, u.role, u.role_id, u.institution_id, u.department_id, u.bio, u.avatar_url, u.status, u.created_at,
+             i.name as institution_name, d.name as department_name,
+             COALESCE(r.name, INITCAP(u.role)) AS role_name,
+             COALESCE(r.color, '#2563EB') AS role_color
       FROM users u
       LEFT JOIN institutions i ON u.institution_id = i.id
       LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN user_roles r ON u.role_id = r.id
       WHERE u.id = $1
     `;
     const result = await query(selectQuery, [userId]);
@@ -178,7 +202,7 @@ async function updateProfile(req, res) {
       UPDATE users
       SET full_name = $1, bio = $2, institution_id = $3, department_id = $4, avatar_url = $5
       WHERE id = $6
-      RETURNING id, email, full_name, role, institution_id, department_id, bio, avatar_url, status, created_at
+      RETURNING id, email, full_name, role, role_id, institution_id, department_id, bio, avatar_url, status, created_at
     `;
 
     const result = await query(updateQuery, [
@@ -192,10 +216,13 @@ async function updateProfile(req, res) {
 
     // Fetch expanded details with labels
     const expandedQuery = `
-      SELECT u.*, i.name as institution_name, d.name as department_name
+      SELECT u.*, i.name as institution_name, d.name as department_name,
+             COALESCE(r.name, INITCAP(u.role)) AS role_name,
+             COALESCE(r.color, '#2563EB') AS role_color
       FROM users u
       LEFT JOIN institutions i ON u.institution_id = i.id
       LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN user_roles r ON u.role_id = r.id
       WHERE u.id = $1
     `;
     const finalResult = await query(expandedQuery, [userId]);

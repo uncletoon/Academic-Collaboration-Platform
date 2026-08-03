@@ -122,7 +122,7 @@ const AppContent = () => {
       case 'profile':
         return <Profile />;
       case 'admin':
-        return user.role === 'admin' ? <Admin /> : <Dashboard setCurrentTab={handleTabChange} />;
+        return ['admin', 'institution_admin'].includes(user.role) ? <Admin /> : <Dashboard setCurrentTab={handleTabChange} />;
       case 'search':
         return <Search queryStr={searchValue} setCurrentTab={handleTabChange} />;
       default:
