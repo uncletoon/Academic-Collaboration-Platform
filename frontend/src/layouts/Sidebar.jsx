@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import {
   Home,
+  LayoutDashboard,
   Users,
   FolderGit2,
   CalendarDays,
-  BookOpen,
+  Newspaper,
   MessageSquareCode,
   ShieldAlert,
   UserCircle2,
@@ -14,19 +16,46 @@ import {
   X
 } from 'lucide-react';
 
+const SidebarAvatar = ({ user }) => {
+  const avatarUrl = api.getAssetUrl(user?.avatar_url);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl]);
+
+  if (!avatarUrl || imageFailed) {
+    return (
+      <div className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-blue-100 text-blue-600 ring-2 ring-blue-50">
+        <UserCircle2 className="w-5 h-5" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={avatarUrl}
+      alt={`${user?.full_name || 'User'} profile`}
+      onError={() => setImageFailed(true)}
+      className="w-9 h-9 shrink-0 rounded-xl object-cover shadow-sm ring-2 ring-blue-200"
+    />
+  );
+};
+
 const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
   const { user, logout } = useAuth();
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home },
+    { id: 'home', label: 'Home', icon: Home },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'communities', label: 'Communities', icon: Users },
-    { id: 'projects', label: 'Projects', icon: FolderGit2 },
+    { id: 'projects', label: 'Collaboration', icon: FolderGit2 },
     { id: 'events', label: 'Events', icon: CalendarDays },
-    { id: 'research', label: 'Research', icon: BookOpen },
+    { id: 'news', label: 'News', icon: Newspaper },
     { id: 'chat', label: 'Discussions', icon: MessageSquareCode },
   ];
 
-  if (user?.role === 'admin') {
+  if (['admin', 'institution_admin'].includes(user?.role)) {
     navItems.push({ id: 'admin', label: 'Admin Panel', icon: ShieldAlert });
   }
 
@@ -53,10 +82,10 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
           </div>
           <div>
             <h1 className="text-lg font-bold font-display tracking-tight text-blue-800">
-              Aca Collaboration
+              Collaboration
             </h1>
             <p className="text-[10px] font-semibold uppercase tracking-widest flex items-center gap-1">
-              Portal
+              Accademic Portal
             </p>
           </div>
           
@@ -111,19 +140,13 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
             onClick={() => { setCurrentTab('profile'); setMobileOpen(false); }}
             className={`w-full flex items-center px-4 py-3 rounded-2xl transition-all duration-300 group mb-2 border ${currentTab === 'profile' ? 'bg-blue-100/50 border-blue-600/20' : 'border-transparent hover:bg-canvas-100 hover:border-slate-200'}`}
           >
-            {user?.avatar_url ? (
-              <img src={user.avatar_url} alt="Profile" className="w-9 h-9 rounded-xl object-cover shadow-sm ring-2 ring-blue-200" />
-            ) : (
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-100 text-blue-600 ring-2 ring-blue-50">
-                <UserCircle2 className="w-5 h-5" />
-              </div>
-            )}
+            <SidebarAvatar user={user} />
             <div className="ml-3 text-left overflow-hidden">
               <p className="text-sm font-bold truncate">
                 {user?.full_name || 'User'}
               </p>
               <p className="text-[10px] font-semibold uppercase tracking-widest truncate">
-                {user?.role || 'Guest'}
+                {user?.role_name || user?.role || 'Guest'}
               </p>
             </div>
           </button>

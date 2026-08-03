@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { GraduationCap, Lock, Mail, User, BookOpen, Loader2, ArrowRight, Users, Globe, Award } from 'lucide-react';
+import { GraduationCap, Lock, Mail, User, BookOpen, Loader2, ArrowRight, Users, Globe, Award, ContactRound } from 'lucide-react';
 
 const Register = ({ onSwitchLogin }) => {
   const { register } = useAuth();
@@ -9,6 +9,7 @@ const Register = ({ onSwitchLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('student');
+  const [studentId, setStudentId] = useState('');
   const [bio, setBio] = useState('');
 
   const [institutions, setInstitutions] = useState([]);
@@ -58,14 +59,18 @@ const Register = ({ onSwitchLogin }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password || !fullName || !role) {
+    if (!email || !password || !fullName || !role || (role === 'student' && !studentId)) {
       setErrorMsg('Please fill in all required fields.');
+      return;
+    }
+    if (role === 'student' && !/^\d{1,10}$/.test(studentId)) {
+      setErrorMsg('Student ID must contain no more than 10 digits.');
       return;
     }
     setErrorMsg('');
     setLoading(true);
     try {
-      await register({ email, password, fullName, role, institutionId: selectedInstitution || null, departmentId: selectedDepartment || null, bio });
+      await register({ email, password, fullName, role, studentId: role === 'student' ? studentId : null, institutionId: selectedInstitution || null, departmentId: selectedDepartment || null, bio });
     } catch (err) {
       setErrorMsg(err.message || 'Registration failed.');
     } finally {
@@ -262,10 +267,37 @@ const Register = ({ onSwitchLogin }) => {
                     <option value="student">Student</option>
                     <option value="lecturer">Lecturer</option>
                     <option value="researcher">Researcher</option>
-                    <option value="admin">Institution Administrator</option>
                   </select>
                 </div>
               </div>
+
+              {role === 'student' && (
+                <div>
+                  <label htmlFor="student-id" className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: '#475569' }}>Student ID *</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none" style={{ color: getIconColor('studentId') }}>
+                      <ContactRound className="h-4 w-4" />
+                    </span>
+                    <input
+                      id="student-id"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]{1,10}"
+                      maxLength={10}
+                      placeholder="Up to 10 digits"
+                      value={studentId}
+                      required
+                      onChange={(e) => setStudentId(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      onFocus={() => setFocusField('studentId')}
+                      onBlur={() => setFocusField(null)}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl text-sm"
+                      style={getInputStyle('studentId')}
+                      aria-describedby="student-id-help"
+                    />
+                  </div>
+                  <p id="student-id-help" className="mt-1.5 text-[11px] text-slate-500">Digits only, maximum 10.</p>
+                </div>
+              )}
 
               {/* Row 3: Institution + Department */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

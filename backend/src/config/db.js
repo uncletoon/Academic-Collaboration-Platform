@@ -48,8 +48,8 @@ async function initDatabase() {
       const passwordHash = await bcrypt.hash(adminPass, 10);
       
       const seedAdminQuery = `
-        INSERT INTO users (email, password_hash, full_name, role, institution_id, department_id, bio)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO users (email, password_hash, full_name, role, role_id, institution_id, department_id, bio)
+        VALUES ($1, $2, $3, $4, (SELECT id FROM user_roles WHERE role_key = 'admin'), $5, $6, $7)
       `;
       
       // Admin doesn't need to belong to specific institution/dept initially

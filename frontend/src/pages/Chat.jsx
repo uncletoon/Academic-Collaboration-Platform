@@ -1,504 +1,891 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  Inbox,
+  LoaderCircle,
+  MessageCircle,
+  MessageSquarePlus,
+  Plus,
+  Search,
+  Send,
+  Users,
+  X,
+} from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { 
-  MessageSquarePlus, 
-  Users, 
-  Send, 
-  CornerDownRight, 
-  Search,
-  Inbox,
-  UserCheck,
-  MessageCircle
-} from 'lucide-react';
+
+const API_ORIGIN = 'http://localhost:5000';
+
+const getErrorMessage = (error, fallback) =>
+  error?.message || error?.response?.data?.message || fallback;
+
+const sameId = (first, second) => String(first) === String(second);
+
+const formatTime = (date) => {
+  if (!date) return '';
+
+  return new Intl.DateTimeFormat([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(date));
+};
+
+const formatRoomTime = (date) => {
+  if (!date) return '';
+
+  const messageDate = new Date(date);
+  const today = new Date();
+  const sameDay = messageDate.toDateString() === today.toDateString();
+
+  if (sameDay) return formatTime(date);
+
+  return new Intl.DateTimeFormat([], {
+    month: 'short',
+    day: 'numeric',
+  }).format(messageDate);
+};
+
+const initialsFor = (name = 'Discussion') =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+const resolveAvatarUrl = (avatarUrl) => {
+  if (!avatarUrl) return null;
+  if (/^https?:\/\//i.test(avatarUrl)) return avatarUrl;
+  return `${API_ORIGIN}${avatarUrl}`;
+};
+
+const Avatar = ({ name, src, group = false, size = 'md', className = '' }) => {
+  const [failed, setFailed] = useState(false);
+  const resolvedSrc = resolveAvatarUrl(src);
+
+  return (
+    <span
+      className={`discussion-avatar discussion-avatar--${size} ${
+        group ? 'discussion-avatar--group' : ''
+      } ${className}`}
+      aria-hidden="true"
+    >
+      {resolvedSrc && !failed ? (
+        <img src={resolvedSrc} alt="" onError={() => setFailed(true)} />
+      ) : group ? (
+        <Users />
+      ) : (
+        <span>{initialsFor(name)}</span>
+      )}
+    </span>
+  );
+};
+
+const ChatSkeleton = () => (
+  <div className="discussion-skeleton" aria-label="Loading conversations">
+    {[0, 1, 2, 3].map((item) => (
+      <div className="discussion-skeleton__row" key={item}>
+        <span />
+        <div>
+          <i />
+          <i />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const EmptyState = ({ icon: Icon, title, description, action }) => (
+  <div className="discussion-empty">
+    <span className="discussion-empty__icon">
+      <Icon aria-hidden="true" />
+    </span>
+    <h3>{title}</h3>
+    <p>{description}</p>
+    {action}
+  </div>
+);
+
+const Modal = ({ eyebrow, title, description, onClose, children }) => {
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="discussion-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="discussion-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="discussion-modal-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="discussion-modal__header">
+          <div>
+            <p>{eyebrow}</p>
+            <h2 id="discussion-modal-title">{title}</h2>
+            {description && <span>{description}</span>}
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close dialog">
+            <X aria-hidden="true" />
+          </button>
+        </header>
+        {children}
+      </section>
+    </div>
+  );
+};
 
 const Chat = () => {
   const { user } = useAuth();
   const socket = useSocket();
 
-  // Chat lists
   const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
+  const [roomQuery, setRoomQuery] = useState('');
+  const [peopleQuery, setPeopleQuery] = useState('');
+  const [unreadByRoom, setUnreadByRoom] = useState({});
 
-  // Modals state
+  const [roomsLoading, setRoomsLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [creatingTargetId, setCreatingTargetId] = useState(null);
+  const [error, setError] = useState('');
+
   const [showDMModal, setShowDMModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [systemUsers, setSystemUsers] = useState([]);
-
-  // Group creation selections
   const [groupName, setGroupName] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState([]);
 
-  // Layout refs
-  const messagesEndRef = useRef(null);
+  const messagesViewportRef = useRef(null);
+  const composerRef = useRef(null);
+  const selectedRoomRef = useRef(null);
+  const roomIdsRef = useRef([]);
 
-  // Fetch chat rooms list
-  const loadRooms = async () => {
-    try {
-      const res = await api.getChatRooms();
-      setRooms(res.rooms || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    loadRooms();
+  const getRoomName = useCallback((room) => {
+    if (!room) return '';
+    if (room.is_group) return room.name || 'Untitled group';
+    return room.other_members?.[0]?.full_name || 'Direct message';
   }, []);
 
-  // Fetch messages when room is selected
+  const getRoomMeta = useCallback((room) => {
+    if (!room) return '';
+    if (room.is_group) {
+      const otherCount = room.other_members?.length || 0;
+      const total = otherCount + 1;
+      return `${total} member${total === 1 ? '' : 's'}`;
+    }
+    return room.other_members?.[0]?.role || 'Member';
+  }, []);
+
+  const getRoomAvatar = useCallback(
+    (room) => (room?.is_group ? null : room?.other_members?.[0]?.avatar_url),
+    [],
+  );
+
+  const appendUniqueMessage = useCallback((message) => {
+    setMessages((current) => {
+      if (current.some((item) => sameId(item.id, message.id))) return current;
+      return [...current, message];
+    });
+  }, []);
+
+  const loadRooms = useCallback(
+    async ({ quiet = false, selectRoomId = null } = {}) => {
+      if (!quiet) setRoomsLoading(true);
+      try {
+        const response = await api.getChatRooms();
+        const nextRooms = response.rooms || [];
+        setRooms(nextRooms);
+        setError('');
+
+        setSelectedRoom((current) => {
+          const targetId = selectRoomId || current?.id;
+          if (!targetId) return current;
+          return nextRooms.find((room) => sameId(room.id, targetId)) || current;
+        });
+
+        return nextRooms;
+      } catch (loadError) {
+        setError(getErrorMessage(loadError, 'We could not load your conversations.'));
+        return [];
+      } finally {
+        if (!quiet) setRoomsLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const roomId = new URLSearchParams(window.location.search).get('room');
+    loadRooms({ selectRoomId: roomId });
+  }, [loadRooms]);
+
+  useEffect(() => {
+    selectedRoomRef.current = selectedRoom;
+  }, [selectedRoom]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+
+    const nextIds = rooms.map((room) => String(room.id));
+    const previousIds = roomIdsRef.current;
+
+    nextIds
+      .filter((id) => !previousIds.includes(id))
+      .forEach((id) => socket.emit('join_chat_room', id));
+    previousIds
+      .filter((id) => !nextIds.includes(id))
+      .forEach((id) => socket.emit('leave_chat_room', id));
+
+    roomIdsRef.current = nextIds;
+    return undefined;
+  }, [rooms, socket]);
+
+  useEffect(
+    () => () => {
+      if (!socket) return;
+      roomIdsRef.current.forEach((id) => socket.emit('leave_chat_room', id));
+    },
+    [socket],
+  );
+
   useEffect(() => {
     if (!selectedRoom) {
       setMessages([]);
-      return;
+      return undefined;
     }
 
-    const loadMessages = async () => {
-      try {
-        const res = await api.getRoomMessages(selectedRoom.id);
-        setMessages(res.messages || []);
-      } catch (err) {
-        alert(err.message);
-      }
-    };
-    loadMessages();
+    let active = true;
+    setMessagesLoading(true);
+    setError('');
+    setUnreadByRoom((current) => ({ ...current, [selectedRoom.id]: 0 }));
 
-    // Register joining the room on socket server
-    if (socket) {
-      socket.emit('join_chat_room', selectedRoom.id);
-    }
+    api
+      .getRoomMessages(selectedRoom.id)
+      .then((response) => {
+        if (active) setMessages(response.messages || []);
+      })
+      .catch((loadError) => {
+        if (active) {
+          setError(getErrorMessage(loadError, 'We could not load this discussion.'));
+        }
+      })
+      .finally(() => {
+        if (active) setMessagesLoading(false);
+      });
 
     return () => {
-      if (socket && selectedRoom) {
-        socket.emit('leave_chat_room', selectedRoom.id);
-      }
+      active = false;
     };
-  }, [selectedRoom, socket]);
+  }, [selectedRoom?.id]);
 
-  // Listen to live socket messages
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) return undefined;
 
-    const handleIncomingMessage = (chatMsg) => {
-      console.log('Incoming live message:', chatMsg);
-      // Append if it belongs to selected room
-      if (selectedRoom && chatMsg.room_id === selectedRoom.id) {
-        setMessages((prev) => [...prev, chatMsg]);
+    const handleIncomingMessage = (chatMessage) => {
+      const activeRoom = selectedRoomRef.current;
+      const isActiveRoom = activeRoom && sameId(chatMessage.room_id, activeRoom.id);
+
+      if (isActiveRoom) {
+        appendUniqueMessage(chatMessage);
+      } else if (!sameId(chatMessage.sender_id, user?.id)) {
+        setUnreadByRoom((current) => ({
+          ...current,
+          [chatMessage.room_id]: (current[chatMessage.room_id] || 0) + 1,
+        }));
       }
-      
-      // Refresh the rooms preview list to update previews
-      loadRooms();
+
+      setRooms((current) => {
+        const roomIndex = current.findIndex((room) => sameId(room.id, chatMessage.room_id));
+        if (roomIndex < 0) {
+          loadRooms({ quiet: true });
+          return current;
+        }
+
+        const updated = {
+          ...current[roomIndex],
+          latest_message: chatMessage,
+        };
+        return [updated, ...current.filter((_, index) => index !== roomIndex)];
+      });
     };
 
     socket.on('chat_message', handleIncomingMessage);
+    return () => socket.off('chat_message', handleIncomingMessage);
+  }, [appendUniqueMessage, loadRooms, socket, user?.id]);
 
-    return () => {
-      socket.off('chat_message', handleIncomingMessage);
-    };
-  }, [socket, selectedRoom]);
-
-  // Scroll to bottom on new messages
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!inputMessage || !inputMessage.trim() || !selectedRoom) return;
-
-    try {
-      await api.sendMessage(selectedRoom.id, inputMessage.trim());
-      setInputMessage('');
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-  // Initiate direct message room
-  const startDMRoom = async (targetUserId) => {
-    try {
-      const res = await api.createDMRoom(targetUserId);
-      setShowDMModal(false);
-      // Reload rooms list and auto-select
-      await loadRooms();
-      
-      // Find room in the newly fetched list
-      const tempRoomsRes = await api.getChatRooms();
-      const matched = tempRoomsRes.rooms?.find(r => r.id === res.roomId);
-      if (matched) {
-        setSelectedRoom(matched);
-      }
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-  const openNewDMSelector = async () => {
-    setShowDMModal(true);
-    try {
-      const res = await api.getUsers();
-      setSystemUsers(res.users || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const openGroupSelector = async () => {
-    setShowGroupModal(true);
-    try {
-      const res = await api.getUsers();
-      setSystemUsers(res.users || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCreateGroup = async (e) => {
-    e.preventDefault();
-    if (!groupName || selectedUserIds.length === 0) return;
-
-    try {
-      const res = await api.createGroupRoom({
-        name: groupName,
-        memberIds: selectedUserIds
+    if (!messagesLoading) {
+      const viewport = messagesViewportRef.current;
+      viewport?.scrollTo({
+        top: viewport.scrollHeight,
+        behavior: messages.length > 1 ? 'smooth' : 'auto',
       });
-      setGroupName('');
-      setSelectedUserIds([]);
-      setShowGroupModal(false);
-      
-      // Reload rooms list and select
-      await loadRooms();
-      const tempRoomsRes = await api.getChatRooms();
-      const matched = tempRoomsRes.rooms?.find(r => r.id === res.roomId);
-      if (matched) {
-        setSelectedRoom(matched);
-      }
-    } catch (err) {
-      alert(err.message);
+    }
+  }, [messages, messagesLoading]);
+
+  useEffect(() => {
+    if (selectedRoom && !messagesLoading) composerRef.current?.focus();
+  }, [selectedRoom?.id, messagesLoading]);
+
+  const filteredRooms = useMemo(() => {
+    const query = roomQuery.trim().toLowerCase();
+    if (!query) return rooms;
+
+    return rooms.filter((room) => {
+      const searchable = [
+        getRoomName(room),
+        getRoomMeta(room),
+        room.latest_message?.message,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return searchable.includes(query);
+    });
+  }, [getRoomMeta, getRoomName, roomQuery, rooms]);
+
+  const availableUsers = useMemo(() => {
+    const query = peopleQuery.trim().toLowerCase();
+    return systemUsers.filter((person) => {
+      if (sameId(person.id, user?.id)) return false;
+      if (!query) return true;
+      return [person.full_name, person.role, person.institution_name]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [peopleQuery, systemUsers, user?.id]);
+
+  const selectRoom = (room) => {
+    setSelectedRoom(room);
+    setUnreadByRoom((current) => ({ ...current, [room.id]: 0 }));
+  };
+
+  const handleSendMessage = async (event) => {
+    event.preventDefault();
+    const message = inputMessage.trim();
+    if (!message || !selectedRoom || sending) return;
+
+    setSending(true);
+    setError('');
+
+    try {
+      const response = await api.sendMessage(selectedRoom.id, message);
+      if (response.chatMessage) appendUniqueMessage(response.chatMessage);
+      setInputMessage('');
+      setRooms((current) =>
+        current.map((room) =>
+          sameId(room.id, selectedRoom.id)
+            ? { ...room, latest_message: response.chatMessage }
+            : room,
+        ),
+      );
+    } catch (sendError) {
+      setError(getErrorMessage(sendError, 'Your message was not sent. Please try again.'));
+    } finally {
+      setSending(false);
     }
   };
 
-  const toggleGroupCheckbox = (userId) => {
-    setSelectedUserIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+  const handleComposerKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  };
+
+  const loadPeople = async () => {
+    setPeopleLoading(true);
+    setError('');
+    try {
+      const response = await api.getUsers();
+      setSystemUsers(response.users || []);
+    } catch (loadError) {
+      setError(getErrorMessage(loadError, 'We could not load collaborators.'));
+    } finally {
+      setPeopleLoading(false);
+    }
+  };
+
+  const openNewDMSelector = () => {
+    setPeopleQuery('');
+    setShowDMModal(true);
+    loadPeople();
+  };
+
+  const openGroupSelector = () => {
+    setPeopleQuery('');
+    setShowGroupModal(true);
+    loadPeople();
+  };
+
+  const startDMRoom = async (targetUserId) => {
+    if (creating) return;
+    setCreating(true);
+    setCreatingTargetId(targetUserId);
+    setError('');
+    try {
+      const response = await api.createDMRoom(targetUserId);
+      const nextRooms = await loadRooms({ quiet: true, selectRoomId: response.roomId });
+      const room = nextRooms.find((item) => sameId(item.id, response.roomId));
+      if (room) selectRoom(room);
+      setShowDMModal(false);
+    } catch (createError) {
+      setError(getErrorMessage(createError, 'We could not start this conversation.'));
+    } finally {
+      setCreating(false);
+      setCreatingTargetId(null);
+    }
+  };
+
+  const toggleGroupMember = (userId) => {
+    setSelectedUserIds((current) =>
+      current.some((id) => sameId(id, userId))
+        ? current.filter((id) => !sameId(id, userId))
+        : [...current, userId],
     );
   };
 
-  const getRoomName = (room) => {
-    if (room.is_group) return room.name;
-    // Direct message: return name of the other user
-    const other = room.other_members?.[0];
-    return other ? other.full_name : 'Direct Message';
+  const closeGroupModal = () => {
+    setShowGroupModal(false);
+    setGroupName('');
+    setSelectedUserIds([]);
   };
 
-  const getRoomRole = (room) => {
-    if (room.is_group) return 'Academic Group';
-    const other = room.other_members?.[0];
-    return other ? other.role : '';
-  };
+  const handleCreateGroup = async (event) => {
+    event.preventDefault();
+    if (!groupName.trim() || selectedUserIds.length === 0 || creating) return;
 
-  const getRoomAvatar = (room) => {
-    const other = room.other_members?.[0];
-    if (!room.is_group && other?.avatar_url) {
-      return `http://localhost:5000${other.avatar_url}`;
+    setCreating(true);
+    setError('');
+    try {
+      const response = await api.createGroupRoom({
+        name: groupName.trim(),
+        memberIds: selectedUserIds,
+      });
+      const nextRooms = await loadRooms({ quiet: true, selectRoomId: response.roomId });
+      const room = nextRooms.find((item) => sameId(item.id, response.roomId));
+      if (room) selectRoom(room);
+      closeGroupModal();
+    } catch (createError) {
+      setError(getErrorMessage(createError, 'We could not create the group.'));
+    } finally {
+      setCreating(false);
     }
-    return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80';
   };
 
   return (
-    <div className="h-[calc(100vh-140px)] bg-canvas-50 border border-slate-300 rounded-2xl overflow-hidden flex animate-fade-in">
-      {/* 1. Left Room sidebar */}
-      <div className="w-80 border-r border-slate-300 flex flex-col justify-between shrink-0 bg-canvas-50/60">
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header Controls */}
-          <div className="p-4 border-b border-slate-300 flex items-center justify-between">
-            <span className="text-xs font-bold text-canvas-900 uppercase tracking-wider">Conversations</span>
-            <div className="flex gap-1.5">
-              <button
-                onClick={openNewDMSelector}
-                className="p-1.5 bg-canvas-100 border border-slate-300 hover:bg-canvas-300 text-blue-600 rounded-lg transition-colors"
-                title="Start DM Chat"
-              >
-                <MessageSquarePlus className="h-4.5 w-4.5" />
-              </button>
-              <button
-                onClick={openGroupSelector}
-                className="p-1.5 bg-canvas-100 border border-slate-300 hover:bg-canvas-300 text-blue-600 rounded-lg transition-colors"
-                title="Create Group Chat"
-              >
-                <Users className="h-4.5 w-4.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Rooms scrollbar lists */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {rooms.length === 0 ? (
-              <div className="p-6 text-center text-slate-600 text-xs flex flex-col items-center gap-1.5 mt-8">
-                <Inbox className="h-7 w-7 stroke-[1.2]" />
-                <span>No active chat rooms.</span>
-              </div>
-            ) : (
-              rooms.map((room) => {
-                const isActive = selectedRoom && selectedRoom.id === room.id;
-                return (
-                  <div
-                    key={room.id}
-                    onClick={() => setSelectedRoom(room)}
-                    className={`p-3 rounded-xl cursor-pointer transition-all flex items-center gap-3 border ${
-                      isActive 
-                        ? 'bg-blue-950/20 border-blue-500/35 shadow shadow-blue-900/10' 
-                        : 'border-transparent hover:bg-canvas-200/65'
-                    }`}
-                  >
-                    <img
-                      src={getRoomAvatar(room)}
-                      alt="avatar"
-                      className="w-10 h-10 rounded-full border border-slate-300 object-cover"
-                    />
-                    <div className="overflow-hidden flex-1">
-                      <div className="flex justify-between items-center gap-1">
-                        <span className="text-xs font-bold text-canvas-900 truncate">{getRoomName(room)}</span>
-                      </div>
-                      <span className="text-[10px] text-blue-600 capitalize font-medium block mt-0.5">{getRoomRole(room)}</span>
-                      
-                      {room.latest_message?.message && (
-                        <p className="text-[11px] truncate mt-1 leading-normal">
-                          {room.latest_message.sender_id === user.id ? 'You: ' : ''}
-                          {room.latest_message.message}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+    <section className="discussion-shell animate-fade-in" aria-label="Discussions">
+      {error && (
+        <div className="discussion-toast" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError('')} aria-label="Dismiss error">
+            <X aria-hidden="true" />
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* 2. Right messages workspace */}
-      <div className="flex-1 flex flex-col justify-between bg-canvas-100/20 relative">
+      <aside className={`discussion-sidebar ${selectedRoom ? 'discussion-sidebar--hidden-mobile' : ''}`}>
+        <header className="discussion-sidebar__header">
+          <div>
+            <p className="discussion-eyebrow">Workspace</p>
+            <h1>Discussions</h1>
+            <span>Ideas move faster together.</span>
+          </div>
+          <div className="discussion-header-actions">
+            <button type="button" onClick={openNewDMSelector} aria-label="Start a direct message">
+              <MessageSquarePlus aria-hidden="true" />
+            </button>
+            <button type="button" onClick={openGroupSelector} aria-label="Create a discussion group">
+              <Users aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <label className="discussion-search">
+          <Search aria-hidden="true" />
+          <span className="sr-only">Search discussions</span>
+          <input
+            type="search"
+            value={roomQuery}
+            onChange={(event) => setRoomQuery(event.target.value)}
+            placeholder="Search discussions"
+          />
+          {roomQuery && (
+            <button type="button" onClick={() => setRoomQuery('')} aria-label="Clear search">
+              <X aria-hidden="true" />
+            </button>
+          )}
+        </label>
+
+        <div className="discussion-list" aria-live="polite">
+          {roomsLoading ? (
+            <ChatSkeleton />
+          ) : filteredRooms.length === 0 ? (
+            <EmptyState
+              icon={roomQuery ? Search : Inbox}
+              title={roomQuery ? 'No matches found' : 'Start the first conversation'}
+              description={
+                roomQuery
+                  ? 'Try a name, role, or a phrase from a message.'
+                  : 'Connect one-to-one or bring a research group together.'
+              }
+              action={
+                !roomQuery && (
+                  <button type="button" className="discussion-text-action" onClick={openNewDMSelector}>
+                    Start a discussion <ChevronRight aria-hidden="true" />
+                  </button>
+                )
+              }
+            />
+          ) : (
+            filteredRooms.map((room) => {
+              const active = selectedRoom && sameId(selectedRoom.id, room.id);
+              const unread = unreadByRoom[room.id] || 0;
+              const latest = room.latest_message;
+
+              return (
+                <button
+                  type="button"
+                  key={room.id}
+                  className={`discussion-room ${active ? 'discussion-room--active' : ''}`}
+                  onClick={() => selectRoom(room)}
+                  aria-current={active ? 'true' : undefined}
+                >
+                  <Avatar
+                    name={getRoomName(room)}
+                    src={getRoomAvatar(room)}
+                    group={room.is_group}
+                    size="lg"
+                  />
+                  <span className="discussion-room__content">
+                    <span className="discussion-room__topline">
+                      <strong>{getRoomName(room)}</strong>
+                      <time>{formatRoomTime(latest?.created_at)}</time>
+                    </span>
+                    <span className="discussion-room__preview">
+                      <span>
+                        {latest?.message ? (
+                          <>
+                            {sameId(latest.sender_id, user?.id) && <b>You: </b>}
+                            {latest.message}
+                          </>
+                        ) : (
+                          getRoomMeta(room)
+                        )}
+                      </span>
+                      {unread > 0 && <i aria-label={`${unread} unread messages`}>{Math.min(unread, 9)}</i>}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <footer className="discussion-sidebar__footer">
+          <span className={`discussion-live-dot ${socket?.connected ? 'is-live' : ''}`} />
+          {socket?.connected ? 'Live updates connected' : 'Reconnecting to live updates'}
+        </footer>
+      </aside>
+
+      <main className={`discussion-workspace ${selectedRoom ? 'discussion-workspace--active' : ''}`}>
         {selectedRoom ? (
           <>
-            {/* Header banner */}
-            <div className="h-16 px-6 bg-canvas-100/50 border-b border-slate-300 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <img
-                  src={getRoomAvatar(selectedRoom)}
-                  alt="avatar"
-                  className="w-9 h-9 rounded-full border border-slate-300 object-cover"
-                />
-                <div>
-                  <h4 className="text-xs font-bold text-canvas-900">{getRoomName(selectedRoom)}</h4>
-                  <span className="text-[10px] text-blue-600 capitalize block font-medium">{getRoomRole(selectedRoom)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Messages viewport */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-600 text-xs gap-1.5">
-                  <MessageCircle className="h-8 w-8 stroke-[1.2]" />
-                  <span>No message history. Send a greeting to start chatting!</span>
-                </div>
-              ) : (
-                messages.map((msg) => {
-                  const isOwn = msg.sender_id === user.id;
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex gap-3 max-w-[70%] items-start ${
-                        isOwn ? 'ml-auto flex-row-reverse' : ''
-                      }`}
-                    >
-                      {/* Avatar */}
-                      <img
-                        src={msg.sender_avatar ? `http://localhost:5000${msg.sender_avatar}` : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80'}
-                        alt={msg.sender_name}
-                        className="w-7.5 h-7.5 rounded-full border border-slate-300 object-cover shrink-0"
-                      />
-
-                      {/* Bubble */}
-                      <div className="space-y-0.5">
-                        <div className={`flex items-center gap-1.5 text-[9px] text-slate-600 font-medium ${isOwn ? 'flex-row-reverse' : ''}`}>
-                          <span>{msg.sender_name}</span>
-                          <span>•</span>
-                          <span>
-                            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <div className={`p-3 rounded-2xl text-xs leading-relaxed break-words whitespace-pre-line ${
-                          isOwn 
-                            ? 'bg-blue-600 text-white rounded-tr-none' 
-                            : 'bg-canvas-50 text-slatebg-100 rounded-tl-none border border-slate-200'
-                        }`}>
-                          {msg.message}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input field */}
-            <form
-              onSubmit={handleSendMessage}
-              className="p-4 bg-canvas-100/50 border-t border-slate-300 flex gap-3"
-            >
-              <input
-                type="text"
-                placeholder="Type your message..."
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                className="flex-1 px-4 py-2.5 bg-canvas-100 border border-slate-300 rounded-xl text-xs text-canvas-900 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                required
+            <header className="discussion-thread-header">
+              <button
+                type="button"
+                className="discussion-back"
+                onClick={() => setSelectedRoom(null)}
+                aria-label="Back to discussions"
+              >
+                <ArrowLeft aria-hidden="true" />
+              </button>
+              <Avatar
+                name={getRoomName(selectedRoom)}
+                src={getRoomAvatar(selectedRoom)}
+                group={selectedRoom.is_group}
+                size="md"
               />
+              <div>
+                <h2>{getRoomName(selectedRoom)}</h2>
+                <p>
+                  <span className={`discussion-live-dot ${socket?.connected ? 'is-live' : ''}`} />
+                  {getRoomMeta(selectedRoom)} · {socket?.connected ? 'live' : 'reconnecting'}
+                </p>
+              </div>
+            </header>
+
+            <div
+              ref={messagesViewportRef}
+              className="discussion-messages"
+              aria-live="polite"
+              aria-busy={messagesLoading}
+            >
+              {messagesLoading ? (
+                <div className="discussion-message-loading">
+                  <LoaderCircle aria-hidden="true" />
+                  <span>Opening discussion…</span>
+                </div>
+              ) : messages.length === 0 ? (
+                <EmptyState
+                  icon={MessageCircle}
+                  title={`Begin with ${getRoomName(selectedRoom)}`}
+                  description="Share a question, an update, or the idea that gets the work moving."
+                />
+              ) : (
+                <div className="discussion-message-stack">
+                  <div className="discussion-date-divider">
+                    <span>Recent messages</span>
+                  </div>
+                  {messages.map((message, index) => {
+                    const own = sameId(message.sender_id, user?.id);
+                    const previous = messages[index - 1];
+                    const grouped =
+                      previous &&
+                      sameId(previous.sender_id, message.sender_id) &&
+                      new Date(message.created_at) - new Date(previous.created_at) < 5 * 60 * 1000;
+
+                    return (
+                      <article
+                        key={message.id}
+                        className={`discussion-message ${own ? 'discussion-message--own' : ''} ${
+                          grouped ? 'discussion-message--grouped' : ''
+                        }`}
+                      >
+                        {!grouped && (
+                          <Avatar
+                            name={message.sender_name}
+                            src={message.sender_avatar}
+                            size="sm"
+                            className="discussion-message__avatar"
+                          />
+                        )}
+                        <div className="discussion-message__body">
+                          {!grouped && (
+                            <div className="discussion-message__meta">
+                              <strong>{own ? 'You' : message.sender_name}</strong>
+                              <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>
+                            </div>
+                          )}
+                          <p>{message.message}</p>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <form className="discussion-composer" onSubmit={handleSendMessage}>
+              <div className="discussion-composer__field">
+                <textarea
+                  ref={composerRef}
+                  rows="1"
+                  maxLength="4000"
+                  value={inputMessage}
+                  onChange={(event) => setInputMessage(event.target.value)}
+                  onKeyDown={handleComposerKeyDown}
+                  placeholder={`Message ${getRoomName(selectedRoom)}`}
+                  aria-label={`Message ${getRoomName(selectedRoom)}`}
+                />
+              </div>
               <button
                 type="submit"
-                className="px-4.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors flex items-center justify-center shrink-0 shadow"
+                className="discussion-send"
+                disabled={!inputMessage.trim() || sending}
+                aria-label={sending ? 'Sending message' : 'Send message'}
               >
-                <Send className="h-4.5 w-4.5" />
+                {sending ? <LoaderCircle className="discussion-spin" /> : <Send aria-hidden="true" />}
               </button>
             </form>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-600 text-xs gap-1.5">
-            <MessageSquarePlus className="h-10 w-10 stroke-[1.2]" />
-            <span>Select a conversation or create a chat room from the sidebar.</span>
-          </div>
-        )}
-      </div>
-
-      {/* 3. New DM Selection Modal */}
-      {showDMModal && (
-        <div className="fixed inset-0 bg-canvas-900/50 backdrop-blur-sm flex justify-center items-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-sm bg-canvas-50 border border-slate-300 shadow-2xl rounded-2xl p-6 space-y-4 animate-slide-up">
-            <h3 className="text-sm font-bold text-canvas-900 uppercase tracking-wider">Start DM Conversation</h3>
-            
-            <div className="max-h-72 overflow-y-auto space-y-2">
-              {systemUsers.length === 0 ? (
-                <p className="text-xs italic text-center p-4">No other system users found.</p>
-              ) : (
-                systemUsers.map((u) => (
-                  <div
-                    key={u.id}
-                    onClick={() => startDMRoom(u.id)}
-                    className="p-2.5 rounded-xl border border-slate-200 hover:bg-canvas-200 cursor-pointer flex items-center justify-between transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={u.avatar_url ? `http://localhost:5000${u.avatar_url}` : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80'}
-                        alt={u.full_name}
-                        className="w-8.5 h-8.5 rounded-full object-cover"
-                      />
-                      <div>
-                        <span className="text-xs font-bold text-canvas-900 block">{u.full_name}</span>
-                        <span className="text-[9px] text-slate-600 capitalize block">({u.role} - {u.institution_name || 'Generic'})</span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
+          <div className="discussion-welcome">
+            <div className="discussion-welcome__art" aria-hidden="true">
+              <span><MessageCircle /></span>
+              <i />
+              <i />
+              <i />
             </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setShowDMModal(false)}
-                className="px-4 py-2 bg-canvas-300 hover:bg-canvas-300 text-canvas-900 text-xs font-semibold rounded-lg transition-colors"
-              >
-                Close
+            <p className="discussion-eyebrow">Shared thinking</p>
+            <h2>Where good work begins.</h2>
+            <p>
+              Open a conversation to exchange ideas, ask a quick question, or keep your
+              collaboration moving.
+            </p>
+            <div>
+              <button type="button" className="discussion-primary-action" onClick={openNewDMSelector}>
+                <Plus aria-hidden="true" /> New message
+              </button>
+              <button type="button" className="discussion-secondary-action" onClick={openGroupSelector}>
+                <Users aria-hidden="true" /> Create group
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
 
-      {/* 4. Group Chat Creator Modal */}
-      {showGroupModal && (
-        <div className="fixed inset-0 bg-canvas-900/50 backdrop-blur-sm flex justify-center items-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-sm bg-canvas-50 border border-slate-300 shadow-2xl rounded-2xl p-6 space-y-4 animate-slide-up">
-            <h3 className="text-sm font-bold text-canvas-900 uppercase tracking-wider">Initialize Chat Group</h3>
-
-            <form onSubmit={handleCreateGroup} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase">Group Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g., Deep Learning Study Group"
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                  className="w-full px-4 py-2 bg-canvas-100 border border-slate-300 rounded-xl text-xs placeholder-slate-500 focus:outline-none focus:border-blue-500 text-canvas-900"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase">Select Members *</label>
-                <div className="max-h-56 overflow-y-auto space-y-2 border border-slate-200 p-2.5 rounded-xl bg-canvas-100">
-                  {systemUsers.map((u) => {
-                    const isChecked = selectedUserIds.includes(u.id);
-                    return (
-                      <div
-                        key={u.id}
-                        onClick={() => toggleGroupCheckbox(u.id)}
-                        className="flex items-center gap-3 p-1.5 rounded hover:bg-canvas-200 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {}} // toggled by container div click
-                          className="rounded bg-canvas-100 border-slate-300 text-blue-600 focus:ring-blue-550"
-                        />
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={u.avatar_url ? `http://localhost:5000${u.avatar_url}` : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80'}
-                            alt={u.full_name}
-                            className="w-7 h-7 rounded-full object-cover"
-                          />
-                          <div>
-                            <span className="text-[11px] font-bold text-canvas-900 block">{u.full_name}</span>
-                            <span className="text-[9px] text-slate-600 block">({u.role})</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
+      {showDMModal && (
+        <Modal
+          eyebrow="New message"
+          title="Choose a collaborator"
+          description="Find someone across your academic network."
+          onClose={() => setShowDMModal(false)}
+        >
+          <label className="discussion-search discussion-search--modal">
+            <Search aria-hidden="true" />
+            <span className="sr-only">Search collaborators</span>
+            <input
+              autoFocus
+              type="search"
+              value={peopleQuery}
+              onChange={(event) => setPeopleQuery(event.target.value)}
+              placeholder="Search by name, role, or institution"
+            />
+          </label>
+          <div className="discussion-people-list">
+            {peopleLoading ? (
+              <ChatSkeleton />
+            ) : availableUsers.length === 0 ? (
+              <EmptyState
+                icon={Search}
+                title="No collaborators found"
+                description="Try another name, role, or institution."
+              />
+            ) : (
+              availableUsers.map((person) => (
                 <button
                   type="button"
-                  onClick={() => setShowGroupModal(false)}
-                  className="px-4 py-2 bg-canvas-300 hover:bg-canvas-300 text-canvas-900 text-xs font-semibold rounded-lg transition-colors"
+                  key={person.id}
+                  className="discussion-person"
+                  onClick={() => startDMRoom(person.id)}
+                  disabled={creating}
                 >
-                  Cancel
+                  <Avatar name={person.full_name} src={person.avatar_url} size="md" />
+                  <span>
+                    <strong>{person.full_name}</strong>
+                    <small>
+                      {[person.role, person.institution_name].filter(Boolean).join(' · ')}
+                    </small>
+                  </span>
+                  {sameId(creatingTargetId, person.id) ? (
+                    <LoaderCircle className="discussion-spin" />
+                  ) : (
+                    <ChevronRight />
+                  )}
                 </button>
-                <button
-                  type="submit"
-                  disabled={!groupName || selectedUserIds.length === 0}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white text-xs font-semibold rounded-lg transition-colors"
-                >
-                  Create Group
-                </button>
-              </div>
-            </form>
+              ))
+            )}
           </div>
-        </div>
+        </Modal>
       )}
-    </div>
+
+      {showGroupModal && (
+        <Modal
+          eyebrow="Group discussion"
+          title="Bring the team together"
+          description="Name the space and invite the right collaborators."
+          onClose={closeGroupModal}
+        >
+          <form className="discussion-group-form" onSubmit={handleCreateGroup}>
+            <label className="discussion-field">
+              <span>Group name</span>
+              <input
+                autoFocus
+                type="text"
+                maxLength="255"
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+                placeholder="e.g. Climate Data Research"
+              />
+            </label>
+
+            <label className="discussion-search discussion-search--modal">
+              <Search aria-hidden="true" />
+              <span className="sr-only">Search collaborators</span>
+              <input
+                type="search"
+                value={peopleQuery}
+                onChange={(event) => setPeopleQuery(event.target.value)}
+                placeholder="Search collaborators"
+              />
+            </label>
+
+            <div className="discussion-group-label">
+              <span>Select members</span>
+              <b>{selectedUserIds.length} selected</b>
+            </div>
+
+            <div className="discussion-people-list discussion-people-list--selectable">
+              {peopleLoading ? (
+                <ChatSkeleton />
+              ) : availableUsers.length === 0 ? (
+                <EmptyState
+                  icon={Search}
+                  title="No collaborators found"
+                  description="Try another name, role, or institution."
+                />
+              ) : (
+                availableUsers.map((person) => {
+                  const selected = selectedUserIds.some((id) => sameId(id, person.id));
+                  return (
+                    <button
+                      type="button"
+                      key={person.id}
+                      className={`discussion-person ${selected ? 'is-selected' : ''}`}
+                      onClick={() => toggleGroupMember(person.id)}
+                      aria-pressed={selected}
+                    >
+                      <span className="discussion-check">
+                        {selected && <Check aria-hidden="true" />}
+                      </span>
+                      <Avatar name={person.full_name} src={person.avatar_url} size="sm" />
+                      <span>
+                        <strong>{person.full_name}</strong>
+                        <small>{person.role}</small>
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="discussion-modal__actions">
+              <button type="button" className="discussion-secondary-action" onClick={closeGroupModal}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="discussion-primary-action"
+                disabled={!groupName.trim() || selectedUserIds.length === 0 || creating}
+              >
+                {creating ? <LoaderCircle className="discussion-spin" /> : <Users aria-hidden="true" />}
+                Create group
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
   );
 };
 
 export default Chat;
-// 

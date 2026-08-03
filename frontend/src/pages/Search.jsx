@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 const Search = ({ queryStr, setCurrentTab }) => {
-  const [results, setResults] = useState({ users: [], communities: [], projects: [], research: [], events: [] });
+  const [results, setResults] = useState({ users: [], communities: [], projects: [], news: [], events: [] });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -47,7 +47,7 @@ const Search = ({ queryStr, setCurrentTab }) => {
     results.users.length > 0 ||
     results.communities.length > 0 ||
     results.projects.length > 0 ||
-    results.research.length > 0 ||
+    results.news.length > 0 ||
     results.events.length > 0;
 
   return (
@@ -123,24 +123,53 @@ const Search = ({ queryStr, setCurrentTab }) => {
             </div>
           )}
 
-          {/* 3. Research Publications */}
-          {results.research.length > 0 && (
+          {/* 3. Private Projects */}
+          {results.projects.length > 0 && (
             <div className="bg-canvas-50 border border-slate-300 rounded-xl p-5 space-y-3">
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-200">
-                <BookOpen className="h-4.5 w-4.5 text-sky-400" /> Matches: Research repository ({results.research.length})
+                <FolderGit2 className="h-4.5 w-4.5 text-blue-600" /> Matches: Private Projects ({results.projects.length})
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {results.projects.map((project) => (
+                  <button
+                    key={project.id}
+                    onClick={() => setCurrentTab('projects')}
+                    className="p-4 bg-canvas-100 border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer text-left transition-colors"
+                  >
+                    <span className="flex items-center justify-between gap-3">
+                      <strong className="text-xs text-canvas-900 truncate">{project.title}</strong>
+                      <ExternalLink className="h-4 w-4 text-blue-600 shrink-0" />
+                    </span>
+                    <span className="text-[11px] line-clamp-2 mt-1.5 text-slate-600">{project.description}</span>
+                    <span className="text-[10px] font-semibold text-blue-700 block mt-3">
+                      {project.membership_status === 'owner' ? 'Created by you' :
+                        project.membership_status === 'member' ? 'Joined' :
+                          project.membership_status === 'pending' ? 'Request pending' : 'Request access'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 4. News */}
+          {results.news.length > 0 && (
+            <div className="bg-canvas-50 border border-slate-300 rounded-xl p-5 space-y-3">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-200">
+                <BookOpen className="h-4.5 w-4.5 text-sky-400" /> Matches: News ({results.news.length})
               </h4>
               <div className="space-y-3.5">
-                {results.research.map((p) => (
+                {results.news.map((p) => (
                   <div key={p.id} className="p-4 bg-canvas-100 border border-slate-200 rounded-xl flex flex-col sm:flex-row justify-between gap-4">
                     <div>
                       <span className="text-xs font-bold text-canvas-900 block">{p.title}</span>
-                      <span className="text-[10px] text-slate-700 block mt-0.5">Authors: {p.authors}</span>
+                      <span className="text-[10px] text-slate-700 block mt-0.5">{p.category} · {p.description}</span>
                     </div>
                     <button
-                      onClick={() => setCurrentTab('research')}
+                      onClick={() => setCurrentTab('news')}
                       className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1 self-start sm:self-center"
                     >
-                      <Download className="h-3.5 w-3.5" /> Repository
+                      <Download className="h-3.5 w-3.5" /> Read news
                     </button>
                   </div>
                 ))}
@@ -148,7 +177,7 @@ const Search = ({ queryStr, setCurrentTab }) => {
             </div>
           )}
 
-          {/* 4. Events */}
+          {/* 5. Events */}
           {results.events.length > 0 && (
             <div className="bg-canvas-50 border border-slate-300 rounded-xl p-5 space-y-3">
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-200">

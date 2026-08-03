@@ -3,25 +3,27 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { NotificationProvider } from './context/NotificationContext';
 import MainLayout from './layouts/MainLayout';
+import HomeLayout from './layouts/HomeLayout';
 
 // Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import Communities from './pages/Communities';
-import Projects from './pages/Projects';
-import Events from './pages/Events';
-import Research from './pages/Research';
+import Communities from './pages/CommunityPage';
+import Projects from './pages/ProjectsPage';
+import Events from './pages/EventsPage';
+import News from './pages/News';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import Search from './pages/Search';
+import Home from './pages/Home';
 
 const AppContent = () => {
   const { user, loading } = useAuth();
   const getPathTab = () => {
-    const path = window.location.pathname.replace('/', '');
-    return path || 'dashboard';
+    const path = window.location.pathname.split('/').filter(Boolean)[0];
+    return path || 'home';
   };
 
   const [currentTab, setCurrentTab] = useState(getPathTab());
@@ -52,6 +54,10 @@ const AppContent = () => {
   // Switch tabs cleanly resetting searches
   const handleTabChange = (tabId) => {
     setSearchValue('');
+    if (currentTab === tabId && window.location.pathname !== '/' + tabId) {
+      window.location.assign('/' + tabId);
+      return;
+    }
     if (currentTab !== tabId) {
       window.history.pushState(null, '', '/' + tabId);
       setCurrentTab(tabId);
@@ -90,31 +96,47 @@ const AppContent = () => {
     );
   }
 
+  // News stories open as independent, read-only pages without the application shell.
+  if (/^\/news\/\d+\/?$/.test(window.location.pathname)) {
+    return <News />;
+  }
+
   // Logged In Views
   const renderTabContent = () => {
     switch (currentTab) {
       case 'dashboard':
         return <Dashboard setCurrentTab={handleTabChange} />;
+      case 'home':
+        return <Home setCurrentTab={handleTabChange} />;
       case 'communities':
         return <Communities />;
       case 'projects':
         return <Projects />;
       case 'events':
         return <Events />;
+      case 'news':
       case 'research':
-        return <Research />;
+        return <News />;
       case 'chat':
         return <Chat />;
       case 'profile':
         return <Profile />;
       case 'admin':
-        return user.role === 'admin' ? <Admin /> : <Dashboard setCurrentTab={handleTabChange} />;
+        return ['admin', 'institution_admin'].includes(user.role) ? <Admin /> : <Dashboard setCurrentTab={handleTabChange} />;
       case 'search':
         return <Search queryStr={searchValue} setCurrentTab={handleTabChange} />;
       default:
-        return <Dashboard setCurrentTab={handleTabChange} />;
+        return <Home setCurrentTab={handleTabChange} />;
     }
   };
+
+  if (currentTab === 'home') {
+    return (
+      <HomeLayout setCurrentTab={handleTabChange}>
+        <Home setCurrentTab={handleTabChange} />
+      </HomeLayout>
+    );
+  }
 
   return (
     <MainLayout

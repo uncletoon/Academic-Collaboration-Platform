@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { UserCircle, Camera, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Camera, Check, AlertCircle, Loader2, LockKeyhole } from 'lucide-react';
 
 const Profile = () => {
   const { user, refreshUser } = useAuth();
+  const canEditAffiliation = user?.role === 'admin';
   
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [bio, setBio] = useState(user?.bio || '');
@@ -64,8 +65,10 @@ const Profile = () => {
     const formData = new FormData();
     formData.append('fullName', fullName);
     formData.append('bio', bio);
-    formData.append('institutionId', selectedInstitution || '');
-    formData.append('departmentId', selectedDepartment || '');
+    if (canEditAffiliation) {
+      formData.append('institutionId', selectedInstitution || '');
+      formData.append('departmentId', selectedDepartment || '');
+    }
     if (selectedFile) {
       formData.append('avatar', selectedFile);
     }
@@ -85,8 +88,8 @@ const Profile = () => {
   const getRoleBadgeColor = () => {
     switch (user?.role) {
       case 'admin': return 'bg-red-100 text-red-700 border-red-200';
+      case 'institution_admin': return 'bg-violet-100 text-violet-700 border-violet-200';
       case 'lecturer': return 'bg-amber-100 text-amber-700 border-amber-200';
-      case 'researcher': return 'bg-sky-100 text-sky-700 border-sky-200';
       default: return 'bg-blue-100 text-blue-700 border-blue-200';
     }
   };
@@ -100,7 +103,7 @@ const Profile = () => {
           {/* Avatar frame */}
           <div className="relative group shrink-0">
             <img
-              src={user?.avatar_url ? `http://localhost:5000${user.avatar_url}` : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+              src={user?.avatar_url ? api.getAssetUrl(user.avatar_url) : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
               alt={fullName}
               className="w-24 h-24 rounded-full border-2 border-slate-300 object-cover"
             />
@@ -119,7 +122,7 @@ const Profile = () => {
             <div className="flex items-center gap-2.5 flex-col sm:flex-row justify-center sm:justify-start">
               <h3 className="text-lg font-bold text-canvas-900 leading-none">{user?.full_name}</h3>
               <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded border ${getRoleBadgeColor()}`}>
-                {user?.role}
+                {user?.role_name || user?.role}
               </span>
             </div>
             <p className="text-xs font-medium">{user?.email}</p>
@@ -164,8 +167,10 @@ const Profile = () => {
             <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase">Institution</label>
             <select
               value={selectedInstitution}
-              onChange={(e) => setSelectedInstitution(e.target.value)}
-              className="w-full px-4 py-2.5 bg-canvas-100 border border-slate-300 rounded-xl text-xs text-canvas-900 focus:outline-none"
+              onChange={(e) => { setSelectedInstitution(e.target.value); setSelectedDepartment(''); }}
+              disabled={!canEditAffiliation}
+              aria-describedby={!canEditAffiliation ? 'affiliation-lock-help' : undefined}
+              className="w-full px-4 py-2.5 bg-canvas-100 border border-slate-300 rounded-xl text-xs text-canvas-900 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
             >
               <option value="">No Institution Affiliation</option>
               {institutions.map((inst) => (
@@ -175,6 +180,7 @@ const Profile = () => {
               ))}
             </select>
           </div>
+
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -185,8 +191,9 @@ const Profile = () => {
             <select
               value={selectedDepartment}
               onChange={(e) => setSelectedDepartment(e.target.value)}
-              disabled={!selectedInstitution || loadingDepts}
-              className="w-full px-4 py-2.5 bg-canvas-100 border border-slate-300 rounded-xl text-xs text-canvas-900 disabled:opacity-50 focus:outline-none"
+              disabled={!canEditAffiliation || !selectedInstitution || loadingDepts}
+              aria-describedby={!canEditAffiliation ? 'affiliation-lock-help' : undefined}
+              className="w-full px-4 py-2.5 bg-canvas-100 border border-slate-300 rounded-xl text-xs text-canvas-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 focus:outline-none"
             >
               <option value="">No Department Selected</option>
               {departments.map((dept) => (
@@ -196,7 +203,28 @@ const Profile = () => {
               ))}
             </select>
           </div>
+
+          {user?.role === 'student' && (
+            <div>
+              <label htmlFor="profile-student-id" className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase">Student ID</label>
+              <input
+                id="profile-student-id"
+                type="text"
+                value={user?.student_id || 'Not assigned'}
+                readOnly
+                aria-readonly="true"
+                className="w-full cursor-not-allowed rounded-xl border border-slate-300 bg-slate-100 px-4 py-2.5 text-xs text-slate-500 outline-none"
+              />
+            </div>
+          )}
         </div>
+
+        {!canEditAffiliation && (
+          <p id="affiliation-lock-help" className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[11px] font-medium text-slate-600">
+            <LockKeyhole className="h-4 w-4 shrink-0 text-slate-500" />
+            Institution and department are managed by the system administrator.
+          </p>
+        )}
 
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase">Biography / Academic Interests</label>

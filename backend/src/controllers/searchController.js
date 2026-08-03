@@ -1,6 +1,6 @@
 const { query } = require('../config/db');
 
-// Global Search engine across users, communities, projects, research, events
+// Global Search engine across users, communities, projects, news, events
 async function globalSearch(req, res) {
   try {
     const searchTerm = req.query.q;
@@ -9,7 +9,7 @@ async function globalSearch(req, res) {
         users: [],
         communities: [],
         projects: [],
-        research: [],
+        news: [],
         events: []
       });
     }
@@ -34,26 +34,36 @@ async function globalSearch(req, res) {
       LIMIT 10
     `, [pattern]);
 
-    // 3. Search Projects (User must be a member or admin, or project is open)
-    // For simplicity, we search all matching titles/descriptions but restrict results based on privacy rules if necessary.
-    // For a development build, we can let user search any projects they have visibility on
+    // 3. Search private project overviews using the same request-eligibility rules as the directory.
     const projectsPromise = query(`
-      SELECT DISTINCT p.*, u.full_name as creator_name
+      SELECT p.id, p.title, p.description, p.status, p.access_scope, p.institution_id,
+             p.privacy_type, u.full_name as creator_name, i.name as institution_name,
+             (SELECT COUNT(*)::int FROM project_members pmc WHERE pmc.project_id = p.id) AS member_count,
+             CASE
+               WHEN p.created_by = $2 THEN 'owner'
+               WHEN EXISTS (SELECT 1 FROM project_members pmm WHERE pmm.project_id = p.id AND pmm.user_id = $2) THEN 'member'
+               WHEN EXISTS (SELECT 1 FROM project_join_requests pjr WHERE pjr.project_id = p.id AND pjr.user_id = $2 AND pjr.status = 'pending') THEN 'pending'
+               ELSE 'available'
+             END AS membership_status
       FROM projects p
       LEFT JOIN users u ON p.created_by = u.id
-      LEFT JOIN project_members pm ON p.id = pm.project_id
+      LEFT JOIN institutions i ON p.institution_id = i.id
       WHERE (p.title ILIKE $1 OR p.description ILIKE $1)
-        AND (p.created_by = $2 OR pm.user_id = $2 OR $3 = 'admin')
+        AND p.privacy_type = 'private'
+        AND ($4::boolean
+          OR p.created_by = $2
+          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = $2)
+          OR p.access_scope = 'everyone'
+          OR (p.access_scope = 'institution' AND p.institution_id = $3))
       LIMIT 10
-    `, [pattern, req.user.id, req.user.role]);
+    `, [pattern, req.user.id, req.user.institution_id || null, req.user.role === 'admin']);
 
-    // 4. Search Research Publications
-    const researchPromise = query(`
-      SELECT rr.*, u.full_name as uploader_name, i.name as institution_name
-      FROM research_repository rr
-      LEFT JOIN users u ON rr.uploaded_by = u.id
-      LEFT JOIN institutions i ON rr.institution_id = i.id
-      WHERE rr.title ILIKE $1 OR rr.abstract ILIKE $1 OR rr.authors ILIKE $1
+    // 4. Search published news
+    const newsPromise = query(`
+      SELECT n.*, u.full_name as author_name
+      FROM news n
+      LEFT JOIN users u ON n.created_by = u.id
+      WHERE n.title ILIKE $1 OR n.description ILIKE $1 OR n.category ILIKE $1
       LIMIT 10
     `, [pattern]);
 
@@ -68,11 +78,11 @@ async function globalSearch(req, res) {
     `, [pattern]);
 
     // Execute all queries in parallel
-    const [usersRes, communitiesRes, projectsRes, researchRes, eventsRes] = await Promise.all([
+    const [usersRes, communitiesRes, projectsRes, newsRes, eventsRes] = await Promise.all([
       usersPromise,
       communitiesPromise,
       projectsPromise,
-      researchPromise,
+      newsPromise,
       eventsPromise
     ]);
 
@@ -80,7 +90,7 @@ async function globalSearch(req, res) {
       users: usersRes.rows,
       communities: communitiesRes.rows,
       projects: projectsRes.rows,
-      research: researchRes.rows,
+      news: newsRes.rows,
       events: eventsRes.rows
     });
   } catch (error) {

@@ -30,15 +30,20 @@ function authenticateToken(req, res, next) {
 const { query } = require('../config/db');
 async function checkUserActive(req, res, next) {
   try {
-    const result = await query('SELECT status FROM users WHERE id = $1', [req.user.id]);
+    const result = await query(
+      'SELECT email, full_name, avatar_url, role, institution_id, department_id, status FROM users WHERE id = $1',
+      [req.user.id],
+    );
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
     if (result.rows[0].status === 'suspended') {
       return res.status(403).json({ message: 'Your account is suspended. Contact administrator.' });
     }
+    // Use current authorization and institution data even when an older token is still active.
+    req.user = { ...req.user, ...result.rows[0] };
     next();
-  } catch (error) {
+  } catch {
     return res.status(500).json({ message: 'Server check status error' });
   }
 }

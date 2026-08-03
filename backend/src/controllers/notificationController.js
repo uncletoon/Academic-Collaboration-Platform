@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { normalizeNotification } = require('../services/notificationService');
 
 // Get all notifications for user
 async function getUserNotifications(req, res) {
@@ -11,7 +12,9 @@ async function getUserNotifications(req, res) {
       LIMIT 100
     `;
     const result = await query(sql, [userId]);
-    return res.status(200).json({ notifications: result.rows });
+    return res.status(200).json({
+      notifications: result.rows.map(normalizeNotification)
+    });
   } catch (error) {
     console.error('Fetch notifications error:', error);
     return res.status(500).json({ message: 'Internal server error fetching notifications.' });
