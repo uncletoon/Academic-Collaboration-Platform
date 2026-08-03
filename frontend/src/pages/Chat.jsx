@@ -231,7 +231,8 @@ const Chat = () => {
   );
 
   useEffect(() => {
-    loadRooms();
+    const roomId = new URLSearchParams(window.location.search).get('room');
+    loadRooms({ selectRoomId: roomId });
   }, [loadRooms]);
 
   useEffect(() => {

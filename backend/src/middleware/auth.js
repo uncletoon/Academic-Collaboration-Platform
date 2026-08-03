@@ -31,7 +31,7 @@ const { query } = require('../config/db');
 async function checkUserActive(req, res, next) {
   try {
     const result = await query(
-      'SELECT email, role, institution_id, department_id, status FROM users WHERE id = $1',
+      'SELECT email, full_name, avatar_url, role, institution_id, department_id, status FROM users WHERE id = $1',
       [req.user.id],
     );
     if (result.rowCount === 0) {

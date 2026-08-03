@@ -156,10 +156,10 @@ async function createGroupRoom(req, res) {
         // Notify members
         createUserNotification({
           userId: parsedId,
-          title: 'Added to Chat Group',
-          content: `You were added to the group chat "${name}" by ${req.user.full_name}`,
+          title: `Added to "${name}"`,
+          content: `${req.user.full_name || req.user.email || 'A user'} added you to the group chat "${name}".`,
           type: 'chat',
-          link: '/chat'
+          link: `/chat?room=${newRoomId}`
         });
       }
     }
@@ -210,7 +210,8 @@ async function sendMessage(req, res) {
     const otherMembers = await query('SELECT user_id FROM chat_members WHERE room_id = $1 AND user_id != $2', [roomId, currentUserId]);
     const roomQuery = await query('SELECT name, is_group FROM chat_rooms WHERE id = $1', [roomId]);
     const room = roomQuery.rows[0];
-    const sourceTitle = room.is_group ? `New message in "${room.name}"` : `New message from ${req.user.full_name}`;
+    const senderName = newMessage.sender_name || req.user.email || 'A user';
+    const sourceTitle = room.is_group ? `New message in "${room.name}"` : `New message from ${senderName}`;
 
     for (const member of otherMembers.rows) {
       createUserNotification({
@@ -218,7 +219,7 @@ async function sendMessage(req, res) {
         title: sourceTitle,
         content: message.length > 50 ? `${message.substring(0, 50)}...` : message,
         type: 'chat',
-        link: '/chat'
+        link: `/chat?room=${roomId}`
       });
     }
 

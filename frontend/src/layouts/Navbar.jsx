@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { Bell, Search, CheckCheck, Inbox, ChevronRight } from 'lucide-react';
@@ -7,6 +7,52 @@ const Navbar = ({ setMobileOpen, onSearch, searchValue }) => {
   const { user } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [showDropdown, setShowDropdown] = useState(false);
+  const notificationMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!showDropdown) return undefined;
+
+    const closeOnOutsideClick = (event) => {
+      if (!notificationMenuRef.current?.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setShowDropdown(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showDropdown]);
+
+  const getNotificationLink = (link) => {
+    if (!link) return null;
+    const target = new URL(link, window.location.origin);
+    if (target.origin !== window.location.origin) return target.href;
+
+    const legacyDetail = target.pathname.match(/^\/(communities|events|projects)\/(\d+)\/?$/);
+    if (legacyDetail) {
+      target.pathname = `/${legacyDetail[1]}`;
+      target.search = `?id=${legacyDetail[2]}`;
+    } else if (target.pathname === '/communities/invitations') {
+      target.pathname = '/communities';
+      target.search = '';
+    }
+
+    return `${target.pathname}${target.search}${target.hash}`;
+  };
+
+  const openNotification = async (notification) => {
+    if (!notification.is_read) await markAsRead(notification.id);
+    setShowDropdown(false);
+
+    const target = getNotificationLink(notification.link);
+    if (target) window.location.assign(target);
+  };
 
   return (
     <header className="h-16 sticky top-0 z-30 w-full backdrop-blur-2xl border-b bg-slate-50/85 border-slate-300 shadow-[0_4px_20px_rgba(37,99,235,0.05)]">
@@ -45,14 +91,20 @@ const Navbar = ({ setMobileOpen, onSearch, searchValue }) => {
         <div className="flex items-center gap-4">
           
           {/* Notifications Dropdown */}
-          <div className="relative">
+          <div className="relative" ref={notificationMenuRef}>
             <button
-              onClick={() => setShowDropdown(!showDropdown)}
+              type="button"
+              onClick={() => setShowDropdown((open) => !open)}
               className="relative p-2.5 rounded-xl text-slate-700 hover:bg-canvas-200 transition-all duration-300 hover:shadow-sm border border-transparent hover:border-slate-300 group"
+              aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
+              aria-expanded={showDropdown}
+              aria-haspopup="menu"
             >
               <Bell className="h-5 w-5 transition-transform duration-300 group-hover:rotate-12" />
               {unreadCount > 0 && (
-                <span className="absolute top-2 right-2 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-canvas-50 animate-pulse" />
+                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 flex items-center justify-center bg-red-500 text-white text-[10px] leading-none font-bold rounded-full border-2 border-canvas-50">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
               )}
             </button>
 
@@ -90,15 +142,19 @@ const Navbar = ({ setMobileOpen, onSearch, searchValue }) => {
                   ) : (
                     <div className="divide-y divide-canvas-200/50">
                       {notifications.map(notif => (
-                        <div
+                        <button
+                          type="button"
                           key={notif.id}
-                          className={`p-4 transition-all duration-300 hover:bg-slate-50 cursor-pointer group ${!notif.is_read ? 'bg-blue-50/60' : 'bg-transparent'}`}
-                          onClick={() => !notif.is_read && markAsRead(notif.id)}
+                          className={`block w-full p-4 text-left transition-all duration-300 hover:bg-slate-50 cursor-pointer group ${!notif.is_read ? 'bg-blue-50/60' : 'bg-transparent'}`}
+                          onClick={() => openNotification(notif)}
                         >
                           <div className="flex gap-3">
                             <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${!notif.is_read ? 'bg-blue-600 shadow-[0_0_6px_rgba(37,99,235,0.4)]' : 'bg-transparent shadow-none'}`} />
                             <div className="flex-1 min-w-0">
-                              <p className={`text-sm leading-tight ${!notif.is_read ? 'font-bold text-canvas-900' : 'text-slate-800'}`}>
+                              <p className={`text-sm leading-tight ${!notif.is_read ? 'font-bold text-canvas-900' : 'font-semibold text-slate-800'}`}>
+                                {notif.title || 'Notification'}
+                              </p>
+                              <p className="text-xs leading-relaxed text-slate-600 mt-1">
                                 {notif.content}
                               </p>
                               <p className="text-[10px] font-semibold uppercase tracking-widest mt-2">
@@ -107,7 +163,7 @@ const Navbar = ({ setMobileOpen, onSearch, searchValue }) => {
                             </div>
                             <ChevronRight className="h-4 w-4 text-slate-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all self-center" />
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}

@@ -120,7 +120,7 @@ async function updateCommunity(req, res) {
     const userId = req.user.id;
     const { name, description, category, privacy_type } = req.body;
 
-    const checkComm = await query('SELECT created_by, privacy_type, institution_id FROM academic_communities WHERE id = $1', [communityId]);
+    const checkComm = await query('SELECT name, created_by, privacy_type, institution_id FROM academic_communities WHERE id = $1', [communityId]);
     if (checkComm.rowCount === 0) {
       return res.status(404).json({ message: 'Community not found.' });
     }
@@ -295,10 +295,10 @@ async function inviteUser(req, res) {
     // Notify target user
     createUserNotification({
       userId: targetUserId,
-      title: 'Community Invitation',
-      content: `You have been invited to join a community.`,
+      title: `Invitation to "${checkComm.rows[0].name}"`,
+      content: `${req.user.full_name || req.user.email || 'A community owner'} invited you to join "${checkComm.rows[0].name}".`,
       type: 'community',
-      link: `/communities/invitations`
+      link: '/communities'
     });
 
     return res.status(201).json({ message: 'User invited successfully.' });
@@ -446,9 +446,9 @@ async function createPost(req, res) {
       createUserNotification({
         userId: row.user_id,
         title: `New Post in ${commName}`,
-        content: `${req.user.full_name} posted: "${title}"`,
+        content: `${post.author_name || req.user.email || 'A community member'} posted in ${commName}: "${title}".`,
         type: 'community',
-        link: `/communities/${communityId}`
+        link: `/communities?id=${communityId}`
       });
     }
 
@@ -495,10 +495,10 @@ async function toggleLikePost(req, res) {
       if (post.user_id !== userId) {
         createUserNotification({
           userId: post.user_id,
-          title: 'Post Liked',
-          content: `${req.user.full_name} liked your post "${post.title}"`,
+          title: `New like on "${post.title}"`,
+          content: `${req.user.full_name || req.user.email || 'A community member'} liked your post: "${post.title}".`,
           type: 'community',
-          link: `/communities/${post.community_id}`
+          link: `/communities?id=${post.community_id}`
         });
       }
       const countResult = await query('SELECT COUNT(*)::int AS like_count FROM likes WHERE post_id = $1', [postId]);
@@ -585,10 +585,10 @@ async function addComment(req, res) {
     if (post.user_id !== userId) {
       createUserNotification({
         userId: post.user_id,
-        title: 'New Comment',
-        content: `${req.user.full_name} commented on your post "${post.title}"`,
+        title: `New reply on "${post.title}"`,
+        content: `${comment.author_name || req.user.email || 'A community member'} commented on your post: "${post.title}".`,
         type: 'community',
-        link: `/communities/${post.community_id}`
+        link: `/communities?id=${post.community_id}`
       });
     }
 
@@ -631,10 +631,9 @@ async function deleteComment(req, res) {
   try {
     const commentId = parseInt(req.params.commentId);
     const userId = req.user.id;
-    const userRole = req.user.role;
 
     const commentQuery = await query(`
-      SELECT c.user_id as comment_author_id, ac.created_by as community_owner_id
+      SELECT ac.created_by as community_owner_id
       FROM comments c
       JOIN posts p ON c.post_id = p.id
       JOIN academic_communities ac ON p.community_id = ac.id
@@ -645,10 +644,10 @@ async function deleteComment(req, res) {
        return res.status(404).json({ message: 'Comment not found.' });
     }
 
-    const { comment_author_id, community_owner_id } = commentQuery.rows[0];
+    const { community_owner_id } = commentQuery.rows[0];
 
-    if (comment_author_id !== userId && community_owner_id !== userId && userRole !== 'admin') {
-      return res.status(403).json({ message: 'Forbidden: Only the comment author or community owner can delete this comment.' });
+    if (community_owner_id !== userId) {
+      return res.status(403).json({ message: 'Forbidden: Only the community owner can delete replies.' });
     }
 
     await query('DELETE FROM comments WHERE id = $1', [commentId]);

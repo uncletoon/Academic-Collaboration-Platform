@@ -251,8 +251,8 @@ async function requestToJoin(req, res) {
     );
     await createUserNotification({
       userId: project.created_by,
-      title: 'New collaboration request',
-      content: `${req.user.email} requested to join "${project.title}".`,
+      title: `New request for "${project.title}"`,
+      content: `${req.user.full_name || req.user.email || 'A user'} requested to join "${project.title}".`,
       type: 'project',
       link: `/projects?id=${projectId}`,
     });

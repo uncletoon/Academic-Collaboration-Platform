@@ -150,10 +150,10 @@ async function createEvent(req, res) {
     for (const row of usersToNotify.rows) {
       createUserNotification({
         userId: row.id,
-        title: 'New Academic Event',
+        title: `New event: "${title}"`,
         content: `A new event "${title}" was scheduled for ${new Date(eventDate).toLocaleDateString()} (${instName})`,
         type: 'event',
-        link: `/events/${event.id}`
+        link: `/events?id=${event.id}`
       });
     }
 
@@ -261,10 +261,10 @@ async function toggleEventRegistration(req, res) {
       if (event.organizer_id && event.organizer_id !== userId) {
         createUserNotification({
           userId: event.organizer_id,
-          title: 'Event Booking Update',
-          content: `${req.user.full_name} registered for your event "${event.title}"`,
+          title: `New registration for "${event.title}"`,
+          content: `${req.user.full_name || req.user.email || 'A user'} registered for your event: "${event.title}".`,
           type: 'event',
-          link: `/events/${eventId}`
+          link: `/events?id=${eventId}`
         });
       }
 

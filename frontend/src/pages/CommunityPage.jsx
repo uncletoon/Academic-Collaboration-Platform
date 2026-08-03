@@ -47,6 +47,7 @@ const CommunityPage = () => {
   const [commentDrafts, setCommentDrafts] = useState({});
   const [loadingComments, setLoadingComments] = useState({});
   const [submittingComments, setSubmittingComments] = useState({});
+  const [deletingComments, setDeletingComments] = useState({});
   const [likingPosts, setLikingPosts] = useState({});
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
@@ -155,6 +156,17 @@ const CommunityPage = () => {
     }
   };
 
+  useEffect(() => {
+    if (loading || selected) return;
+    const communityId = new URLSearchParams(window.location.search).get("id");
+    if (!communityId) return;
+
+    const requestedCommunity = communities.find(
+      (community) => Number(community.id) === Number(communityId),
+    );
+    if (requestedCommunity) openCommunity(requestedCommunity);
+  }, [communities, loading, selected]);
+
   const toggleLike = async (item) => {
     if (likingPosts[item.id]) return;
 
@@ -258,6 +270,44 @@ const CommunityPage = () => {
       setError(err.message);
     } finally {
       setSubmittingComments((current) => ({ ...current, [postId]: false }));
+    }
+  };
+
+  const deleteComment = async (postId, commentId) => {
+    if (deletingComments[commentId] || !window.confirm("Delete this reply?")) {
+      return;
+    }
+
+    setError("");
+    setDeletingComments((current) => ({ ...current, [commentId]: true }));
+    try {
+      await api.deleteComment(commentId);
+      setCommentsByPost((current) => ({
+        ...current,
+        [postId]: (current[postId] || []).filter(
+          (comment) => comment.id !== commentId,
+        ),
+      }));
+      setPosts((current) =>
+        current.map((currentPost) =>
+          currentPost.id === postId
+            ? {
+                ...currentPost,
+                comment_count: Math.max(
+                  0,
+                  (Number(currentPost.comment_count) || 0) - 1,
+                ),
+              }
+            : currentPost,
+        ),
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingComments((current) => ({
+        ...current,
+        [commentId]: false,
+      }));
     }
   };
 
@@ -620,10 +670,24 @@ const CommunityPage = () => {
                                     {comment.author_name?.slice(0, 1) || "A"}
                                   </span>
                                   <div>
-                                    <p className="portal-comment__by">
-                                      <strong>{comment.author_name || "Community member"}</strong>
-                                      <span>{new Date(comment.created_at).toLocaleDateString()}</span>
-                                    </p>
+                                    <div className="portal-comment__header">
+                                      <p className="portal-comment__by">
+                                        <strong>{comment.author_name || "Community member"}</strong>
+                                        <span>{new Date(comment.created_at).toLocaleDateString()}</span>
+                                      </p>
+                                      {isOwner && (
+                                        <button
+                                          type="button"
+                                          className="portal-comment__delete"
+                                          onClick={() => deleteComment(item.id, comment.id)}
+                                          disabled={deletingComments[comment.id]}
+                                          aria-label={`Delete reply from ${comment.author_name || "community member"}`}
+                                          title="Delete reply"
+                                        >
+                                          <Trash2 />
+                                        </button>
+                                      )}
+                                    </div>
                                     <p>{comment.content}</p>
                                   </div>
                                 </article>
