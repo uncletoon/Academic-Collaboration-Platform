@@ -55,7 +55,7 @@ app.get("/health", (req, res) => {
 });
 
 // Centralized error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error("Unhandled Server Error:", err.message);
   res.status(err.status || 500).json({
     message: err.message || "Internal Server Error",

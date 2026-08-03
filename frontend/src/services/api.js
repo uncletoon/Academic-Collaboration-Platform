@@ -101,7 +101,6 @@ const api = {
   updateCommunity: (id, data) => request(`/communities/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCommunity: (id) => request(`/communities/${id}`, { method: 'DELETE' }),
   toggleJoinCommunity: (id) => request(`/communities/${id}/join`, { method: 'POST' }),
-  removeMember: (id, userId) => request(`/communities/${id}/members/${userId}`, { method: 'DELETE' }),
   inviteUser: (id, targetEmail) => request(`/communities/${id}/invite`, { method: 'POST', body: JSON.stringify({ targetEmail }) }),
   getInvitations: () => request('/communities/invitations'),
   respondToInvitation: (invitationId, action) => request(`/communities/invitations/${invitationId}/respond`, { method: 'POST', body: JSON.stringify({ action }) }),
@@ -109,7 +108,6 @@ const api = {
   // Posts, comments, likes
   getCommunityPosts: (commId) => request(`/communities/${commId}/posts`),
   createPost: (commId, data) => request(`/communities/${commId}/posts`, { method: 'POST', body: JSON.stringify(data) }),
-  deletePost: (postId) => request(`/communities/posts/${postId}`, { method: 'DELETE' }),
   toggleLikePost: (postId) => request(`/communities/posts/${postId}/like`, { method: 'POST' }),
   getPostComments: (postId) => request(`/communities/posts/${postId}/comments`),
   addComment: (postId, data) => request(`/communities/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
@@ -145,7 +143,11 @@ const api = {
   deleteNews: (id) => request(`/news/${id}`, { method: 'DELETE' }),
   deleteNewsDocument: (id, documentId) => request(`/news/${id}/documents/${documentId}`, { method: 'DELETE' }),
   downloadNewsDocument: (id, document) => downloadProtectedFile(`/news/${id}/documents/${document.id}/download`, document.filename),
-  getAssetUrl: (storedPath) => storedPath ? `${API_URL.replace(/\/api$/, '')}${storedPath}` : '',
+  getAssetUrl: (storedPath) => {
+    if (!storedPath) return '';
+    if (/^https?:\/\//i.test(storedPath)) return storedPath;
+    return `${API_URL.replace(/\/api\/?$/, '')}/${String(storedPath).replace(/^\//, '')}`;
+  },
 
   // Chat
   getChatRooms: () => request('/chat/rooms'),

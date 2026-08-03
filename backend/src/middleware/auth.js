@@ -43,7 +43,7 @@ async function checkUserActive(req, res, next) {
     // Use current authorization and institution data even when an older token is still active.
     req.user = { ...req.user, ...result.rows[0] };
     next();
-  } catch (error) {
+  } catch {
     return res.status(500).json({ message: 'Server check status error' });
   }
 }

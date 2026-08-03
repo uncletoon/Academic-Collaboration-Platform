@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS users (
     role_id INT REFERENCES user_roles(id) ON DELETE SET NULL,
     institution_id INT REFERENCES institutions(id) ON DELETE SET NULL,
     department_id INT REFERENCES departments(id) ON DELETE SET NULL,
+    student_id VARCHAR(10),
     bio TEXT,
     avatar_url VARCHAR(255),
     status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
@@ -99,8 +100,16 @@ BEGIN
                    WHERE table_name='users' AND column_name='role_id') THEN
         ALTER TABLE users ADD COLUMN role_id INT REFERENCES user_roles(id) ON DELETE SET NULL;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='users' AND column_name='student_id') THEN
+        ALTER TABLE users ADD COLUMN student_id VARCHAR(10);
+    END IF;
 END
 $$;
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_student_id_format_check;
+ALTER TABLE users ADD CONSTRAINT users_student_id_format_check
+    CHECK (student_id IS NULL OR student_id ~ '^[0-9]{1,10}$');
 
 UPDATE users u
 SET role_id = r.id

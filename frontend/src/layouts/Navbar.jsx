@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { Bell, Search, CheckCheck, Inbox, ChevronRight } from 'lucide-react';
 
 const Navbar = ({ setMobileOpen, onSearch, searchValue }) => {
-  const { user } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [showDropdown, setShowDropdown] = useState(false);
   const notificationMenuRef = useRef(null);

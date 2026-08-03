@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import {
   Home,
   LayoutDashboard,
@@ -14,6 +15,32 @@ import {
   GraduationCap,
   X
 } from 'lucide-react';
+
+const SidebarAvatar = ({ user }) => {
+  const avatarUrl = api.getAssetUrl(user?.avatar_url);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl]);
+
+  if (!avatarUrl || imageFailed) {
+    return (
+      <div className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-blue-100 text-blue-600 ring-2 ring-blue-50">
+        <UserCircle2 className="w-5 h-5" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={avatarUrl}
+      alt={`${user?.full_name || 'User'} profile`}
+      onError={() => setImageFailed(true)}
+      className="w-9 h-9 shrink-0 rounded-xl object-cover shadow-sm ring-2 ring-blue-200"
+    />
+  );
+};
 
 const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
   const { user, logout } = useAuth();
@@ -58,7 +85,7 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
               Collaboration
             </h1>
             <p className="text-[10px] font-semibold uppercase tracking-widest flex items-center gap-1">
-              Private Projects
+              Accademic Portal
             </p>
           </div>
           
@@ -113,13 +140,7 @@ const Sidebar = ({ currentTab, setCurrentTab, mobileOpen, setMobileOpen }) => {
             onClick={() => { setCurrentTab('profile'); setMobileOpen(false); }}
             className={`w-full flex items-center px-4 py-3 rounded-2xl transition-all duration-300 group mb-2 border ${currentTab === 'profile' ? 'bg-blue-100/50 border-blue-600/20' : 'border-transparent hover:bg-canvas-100 hover:border-slate-200'}`}
           >
-            {user?.avatar_url ? (
-              <img src={user.avatar_url} alt="Profile" className="w-9 h-9 rounded-xl object-cover shadow-sm ring-2 ring-blue-200" />
-            ) : (
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-100 text-blue-600 ring-2 ring-blue-50">
-                <UserCircle2 className="w-5 h-5" />
-              </div>
-            )}
+            <SidebarAvatar user={user} />
             <div className="ml-3 text-left overflow-hidden">
               <p className="text-sm font-bold truncate">
                 {user?.full_name || 'User'}

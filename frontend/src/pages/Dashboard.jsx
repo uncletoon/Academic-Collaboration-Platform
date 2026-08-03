@@ -6,7 +6,6 @@ import {
   FolderGit2, 
   Calendar, 
   Newspaper,
-  PlusCircle, 
   ExternalLink,
   ArrowRight,
   MessageSquareCode
@@ -165,7 +164,7 @@ const Dashboard = ({ setCurrentTab }) => {
                 </button>
               </div>
             ) : (
-              recentProjects.map((p, i) => (
+              recentProjects.map((p) => (
                 <div
                   key={p.id}
                   onClick={() => setCurrentTab('projects')}

@@ -179,7 +179,7 @@ async function deleteNewsDocument(req, res) {
     if (!result.rowCount) return res.status(404).json({ message: 'Document not found.' });
     removeFile(result.rows[0].filepath);
     return res.status(200).json({ message: 'Document removed.' });
-  } catch (error) {
+  } catch {
     return res.status(500).json({ message: 'Unable to remove document.' });
   }
 }
@@ -195,7 +195,7 @@ async function downloadNewsDocument(req, res) {
     const absolutePath = toAbsolutePath(document.filepath);
     if (!fs.existsSync(absolutePath)) return res.status(404).json({ message: 'File not found.' });
     return res.download(absolutePath, document.filename);
-  } catch (error) {
+  } catch {
     return res.status(500).json({ message: 'Unable to download document.' });
   }
 }

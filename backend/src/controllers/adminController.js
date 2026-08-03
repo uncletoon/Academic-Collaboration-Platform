@@ -84,7 +84,7 @@ async function getAllUsersDetailed(req, res) {
   if (scope === undefined) return;
   try {
     const result = await query(
-      `SELECT u.id, u.email, u.full_name, u.role, u.role_id, u.status, u.created_at,
+      `SELECT u.id, u.email, u.full_name, u.role, u.role_id, u.status, u.created_at, u.student_id,
               u.institution_id, u.department_id,
               i.name AS institution_name, d.name AS department_name,
               COALESCE(r.name, INITCAP(REPLACE(u.role, '_', ' '))) AS role_name,
@@ -114,6 +114,7 @@ async function createUser(req, res) {
   const roleId = validId(req.body.roleId);
   const institutionId = scope || validId(req.body.institutionId);
   const departmentId = validId(req.body.departmentId);
+  const studentId = typeof req.body.studentId === 'string' ? req.body.studentId.trim() : '';
   const bio = typeof req.body.bio === 'string' ? req.body.bio.trim() : '';
 
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ message: 'A valid email address is required.' });
@@ -124,15 +125,18 @@ async function createUser(req, res) {
   try {
     const roleSelection = await getRoleForAssignment(roleId, institutionId, scope);
     if (roleSelection.error) return res.status(roleSelection.status).json({ message: roleSelection.error });
+    if (roleSelection.role.base_role === 'student' && !/^\d{1,10}$/.test(studentId)) {
+      return res.status(400).json({ message: 'Student ID is required and must contain no more than 10 digits.' });
+    }
     if (!(await departmentMatchesInstitution(departmentId, institutionId))) {
       return res.status(400).json({ message: 'The selected department does not belong to the selected institution.' });
     }
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await query(
-      `INSERT INTO users (email, password_hash, full_name, role, role_id, institution_id, department_id, bio)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, email, full_name, role, role_id, institution_id, department_id, bio, status, created_at`,
-      [email, passwordHash, fullName, roleSelection.role.base_role, roleSelection.role.id, institutionId, departmentId, bio],
+      `INSERT INTO users (email, password_hash, full_name, role, role_id, institution_id, department_id, student_id, bio)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, email, full_name, role, role_id, institution_id, department_id, student_id, bio, status, created_at`,
+      [email, passwordHash, fullName, roleSelection.role.base_role, roleSelection.role.id, institutionId, departmentId, roleSelection.role.base_role === 'student' ? studentId : null, bio],
     );
     const user = result.rows[0];
     await recordAdminAction(req.user.id, 'created', 'user', user.id, `Created user account for ${fullName}.`, institutionId);
@@ -153,7 +157,8 @@ async function updateUser(req, res) {
   const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : '';
   const roleId = validId(req.body.roleId);
   const requestedInstitution = validId(req.body.institutionId);
-  const departmentId = validId(req.body.departmentId);
+  const requestedDepartment = validId(req.body.departmentId);
+  const studentId = typeof req.body.studentId === 'string' ? req.body.studentId.trim() : '';
   const bio = typeof req.body.bio === 'string' ? req.body.bio.trim() : '';
   if (!targetUserId) return res.status(400).json({ message: 'A valid user ID is required.' });
   if (!email || !/^\S+@\S+\.\S+$/.test(email) || !fullName || !roleId) {
@@ -161,15 +166,26 @@ async function updateUser(req, res) {
   }
 
   try {
-    const currentResult = await query('SELECT id, role, institution_id FROM users WHERE id = $1', [targetUserId]);
+    const currentResult = await query('SELECT id, role, institution_id, department_id FROM users WHERE id = $1', [targetUserId]);
     if (!currentResult.rowCount) return res.status(404).json({ message: 'User not found.' });
     const current = currentResult.rows[0];
     if (scope && Number(current.institution_id) !== scope) return res.status(403).json({ message: 'You can manage only users from your institution.' });
     if (scope && ['admin', 'institution_admin'].includes(current.role)) return res.status(403).json({ message: 'Only a system administrator can edit administrator accounts.' });
 
-    const institutionId = scope || requestedInstitution;
+    if (scope && (
+      Number(requestedInstitution) !== Number(current.institution_id)
+      || Number(requestedDepartment) !== Number(current.department_id)
+    )) {
+      return res.status(403).json({ message: 'Only a system administrator can change a user\'s institution or department.' });
+    }
+
+    const institutionId = scope ? current.institution_id : requestedInstitution;
+    const departmentId = scope ? current.department_id : requestedDepartment;
     const roleSelection = await getRoleForAssignment(roleId, institutionId, scope);
     if (roleSelection.error) return res.status(roleSelection.status).json({ message: roleSelection.error });
+    if (roleSelection.role.base_role === 'student' && !/^\d{1,10}$/.test(studentId)) {
+      return res.status(400).json({ message: 'Student ID is required and must contain no more than 10 digits.' });
+    }
     if (targetUserId === Number(req.user.id) && roleSelection.role.base_role !== 'admin') {
       return res.status(400).json({ message: 'You cannot remove your own system administrator access.' });
     }
@@ -179,10 +195,10 @@ async function updateUser(req, res) {
 
     const result = await query(
       `UPDATE users
-       SET email = $1, full_name = $2, role = $3, role_id = $4, institution_id = $5, department_id = $6, bio = $7
-       WHERE id = $8
-       RETURNING id, email, full_name, role, role_id, institution_id, department_id, bio, status, created_at`,
-      [email, fullName, roleSelection.role.base_role, roleSelection.role.id, institutionId, departmentId, bio, targetUserId],
+       SET email = $1, full_name = $2, role = $3, role_id = $4, institution_id = $5, department_id = $6, student_id = $7, bio = $8
+       WHERE id = $9
+       RETURNING id, email, full_name, role, role_id, institution_id, department_id, student_id, bio, status, created_at`,
+      [email, fullName, roleSelection.role.base_role, roleSelection.role.id, institutionId, departmentId, roleSelection.role.base_role === 'student' ? studentId : null, bio, targetUserId],
     );
     await recordAdminAction(req.user.id, 'updated', 'user', targetUserId, `Updated user account for ${fullName}.`, institutionId);
     return res.status(200).json({ message: 'User updated successfully.', user: result.rows[0] });
@@ -234,7 +250,7 @@ async function changeUserRole(req, res) {
   if (!targetUserId || !roleId) return res.status(400).json({ message: 'A valid user and role are required.' });
 
   try {
-    const targetResult = await query('SELECT id, role, full_name, institution_id FROM users WHERE id = $1', [targetUserId]);
+    const targetResult = await query('SELECT id, role, full_name, institution_id, student_id FROM users WHERE id = $1', [targetUserId]);
     if (!targetResult.rowCount) return res.status(404).json({ message: 'User not found.' });
     const target = targetResult.rows[0];
     if (scope && Number(target.institution_id) !== scope) return res.status(403).json({ message: 'You can manage only users from your institution.' });
@@ -256,8 +272,14 @@ async function changeUserRole(req, res) {
     if (role.base_role === 'institution_admin' && !target.institution_id) {
       return res.status(400).json({ message: 'An institution administrator must belong to an institution.' });
     }
+    if (role.base_role === 'student' && !/^\d{1,10}$/.test(target.student_id || '')) {
+      return res.status(400).json({ message: 'Add a valid student ID in the user editor before assigning a student role.' });
+    }
 
-    await query('UPDATE users SET role = $1, role_id = $2 WHERE id = $3', [role.base_role, role.id, targetUserId]);
+    await query(
+      'UPDATE users SET role = $1, role_id = $2, student_id = CASE WHEN $1 = \'student\' THEN student_id ELSE NULL END WHERE id = $3',
+      [role.base_role, role.id, targetUserId],
+    );
     await recordAdminAction(req.user.id, 'role_changed', 'user', targetUserId, `Assigned “${role.name}” to ${target.full_name}.`, target.institution_id);
     return res.status(200).json({ message: 'User role updated successfully.', role: role.base_role, roleId: role.id, roleName: role.name });
   } catch (error) {

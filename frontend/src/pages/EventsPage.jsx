@@ -14,7 +14,6 @@ import {
   Search,
   ShieldCheck,
   Trash2,
-  UserRoundCheck,
   Users,
   Video,
   X,

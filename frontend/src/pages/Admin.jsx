@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronRight,
   GraduationCap,
+  ContactRound,
   LayoutDashboard,
   Lock,
   Pencil,
@@ -187,12 +188,16 @@ function UserForm({ item, institutions, departments, roles, isSystemAdmin, savin
     password: '',
     institutionId: initialInstitution,
     departmentId: item?.department_id || '',
+    studentId: item?.student_id || '',
     roleId: item?.role_id || assignableRoles[0]?.id || '',
     bio: item?.bio || '',
   });
   const set = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
   const availableDepartments = departments.filter((department) => Number(department.institution_id) === Number(form.institutionId));
   const availableRoles = roles.filter((role) => Number(role.id) === Number(item?.role_id) || (role.can_assign && (!role.institution_id || Number(role.institution_id) === Number(form.institutionId))));
+  const selectedRole = roles.find((role) => Number(role.id) === Number(form.roleId));
+  const isStudent = selectedRole?.base_role === 'student';
+  const affiliationLocked = Boolean(item) && !isSystemAdmin;
   const changeInstitution = (event) => {
     const institutionId = event.target.value;
     const nextRoles = roles.filter((role) => role.can_assign && (!role.institution_id || Number(role.institution_id) === Number(institutionId)));
@@ -208,10 +213,12 @@ function UserForm({ item, institutions, departments, roles, isSystemAdmin, savin
         </div>
         {!item && <label><span className={labelClass}>Temporary password</span><input type="password" required minLength="8" value={form.password} onChange={set('password')} className={inputClass} placeholder="At least 8 characters" /></label>}
         <div className="grid gap-4 sm:grid-cols-2">
-          <label><span className={labelClass}>Institution</span><select required={form.roleId && roles.find((role) => Number(role.id) === Number(form.roleId))?.base_role === 'institution_admin'} disabled={!isSystemAdmin} value={form.institutionId} onChange={changeInstitution} className={`${inputClass} disabled:bg-slate-100`}><option value="">No institution</option>{institutions.map((institution) => <option key={institution.id} value={institution.id}>{institution.name}</option>)}</select></label>
-          <label><span className={labelClass}>Department</span><select value={form.departmentId} onChange={set('departmentId')} className={inputClass}><option value="">No department</option>{availableDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
+          <label><span className={labelClass}>Institution</span><select required={form.roleId && roles.find((role) => Number(role.id) === Number(form.roleId))?.base_role === 'institution_admin'} disabled={!isSystemAdmin} value={form.institutionId} onChange={changeInstitution} className={`${inputClass} disabled:cursor-not-allowed disabled:bg-slate-100`}><option value="">No institution</option>{institutions.map((institution) => <option key={institution.id} value={institution.id}>{institution.name}</option>)}</select></label>
+          <label><span className={labelClass}>Department</span><select disabled={affiliationLocked} value={form.departmentId} onChange={set('departmentId')} className={`${inputClass} disabled:cursor-not-allowed disabled:bg-slate-100`}><option value="">No department</option>{availableDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
         </div>
         <label><span className={labelClass}>Role</span><select required value={form.roleId} onChange={set('roleId')} className={inputClass}>{availableRoles.map((role) => <option key={role.id} value={role.id}>{role.name}{role.institution_name ? ` · ${role.institution_name}` : ''}</option>)}</select></label>
+        {isStudent && <label><span className={labelClass}>Student ID</span><span className="relative block"><ContactRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input required inputMode="numeric" pattern="[0-9]{1,10}" maxLength="10" value={form.studentId} onChange={(event) => setForm((current) => ({ ...current, studentId: event.target.value.replace(/\D/g, '').slice(0, 10) }))} className={`${inputClass} pl-10`} placeholder="Up to 10 digits" /></span></label>}
+        {affiliationLocked && <p className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[11px] font-medium text-slate-600"><Lock className="h-4 w-4 shrink-0" />Only a system administrator can change an existing user&apos;s institution or department.</p>}
         <label><span className={labelClass}>Biography or notes</span><textarea rows="3" value={form.bio} onChange={set('bio')} className={inputClass} placeholder="Optional academic information" /></label>
       </div>
       <FormActions saving={saving} onCancel={onCancel} submitLabel={item ? 'Save user' : 'Create user'} />
@@ -234,7 +241,8 @@ function Admin() {
   const [editor, setEditor] = useState(null);
 
   const loadAdminData = useCallback(async (quiet = false) => {
-    quiet ? setRefreshing(true) : setLoading(true);
+      if (quiet) setRefreshing(true);
+      else setLoading(true);
     setError('');
     try {
       const [stats, users, institutions, departments, roles, communities, events, audit] = await Promise.all([
@@ -355,7 +363,7 @@ function Admin() {
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100"><ShieldCheck className="h-3.5 w-3.5" />{isSystemAdmin ? 'System administration' : 'Institution administration'}</div>
-            <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Control center</h1>
+            <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl text-blue-300">Control center</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100/80">{isSystemAdmin ? 'Manage every institution, person, access role, and moderation workflow across the system.' : `Manage people, departments, roles, and content belonging to ${currentUser?.institution_name || 'your institution'}.`}</p>
           </div>
           <button type="button" onClick={() => loadAdminData(true)} disabled={refreshing} className="inline-flex w-fit items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/15 disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />Refresh data</button>

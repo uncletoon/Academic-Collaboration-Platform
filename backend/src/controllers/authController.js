@@ -25,6 +25,7 @@ function generateToken(user) {
 async function register(req, res) {
   try {
     const { email, password, fullName, role, institutionId, departmentId, bio } = req.body;
+    const studentId = typeof req.body.studentId === 'string' ? req.body.studentId.trim() : '';
 
     if (!email || !password || !fullName || !role) {
       return res.status(400).json({ message: 'Email, password, full name, and role are required.' });
@@ -45,6 +46,28 @@ async function register(req, res) {
       return res.status(400).json({ message: 'The selected academic role is not available.' });
     }
 
+    if (selectedRole.rows[0].base_role === 'student' && !/^\d{1,10}$/.test(studentId)) {
+      return res.status(400).json({ message: 'Student ID is required and must contain no more than 10 digits.' });
+    }
+
+    const parsedInstitutionId = institutionId && /^\d+$/.test(String(institutionId)) ? Number(institutionId) : null;
+    const parsedDepartmentId = departmentId && /^\d+$/.test(String(departmentId)) ? Number(departmentId) : null;
+    if (departmentId && !parsedDepartmentId) {
+      return res.status(400).json({ message: 'Please select a valid department.' });
+    }
+    if (institutionId && !parsedInstitutionId) {
+      return res.status(400).json({ message: 'Please select a valid institution.' });
+    }
+    if (parsedDepartmentId) {
+      const department = await query(
+        'SELECT id FROM departments WHERE id = $1 AND institution_id = $2',
+        [parsedDepartmentId, parsedInstitutionId],
+      );
+      if (!parsedInstitutionId || !department.rowCount) {
+        return res.status(400).json({ message: 'The selected department does not belong to the selected institution.' });
+      }
+    }
+
     // Check if user already exists
     const userExist = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (userExist.rowCount > 0) {
@@ -56,9 +79,9 @@ async function register(req, res) {
 
     // Save to Database
     const insertQuery = `
-      INSERT INTO users (email, password_hash, full_name, role, role_id, institution_id, department_id, bio)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING id, email, full_name, role, role_id, institution_id, department_id, bio, status, created_at
+      INSERT INTO users (email, password_hash, full_name, role, role_id, institution_id, department_id, student_id, bio)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id, email, full_name, role, role_id, institution_id, department_id, student_id, bio, status, created_at
     `;
     
     const result = await query(insertQuery, [
@@ -67,8 +90,9 @@ async function register(req, res) {
       fullName,
       selectedRole.rows[0].base_role,
       selectedRole.rows[0].id,
-      institutionId ? parseInt(institutionId) : null,
-      departmentId ? parseInt(departmentId) : null,
+      parsedInstitutionId,
+      parsedDepartmentId,
+      selectedRole.rows[0].base_role === 'student' ? studentId : null,
       bio || ''
     ]);
 
@@ -149,7 +173,7 @@ async function getProfile(req, res) {
     const userId = req.params.id ? parseInt(req.params.id) : req.user.id;
 
     const selectQuery = `
-      SELECT u.id, u.email, u.full_name, u.role, u.role_id, u.institution_id, u.department_id, u.bio, u.avatar_url, u.status, u.created_at,
+      SELECT u.id, u.email, u.full_name, u.role, u.role_id, u.institution_id, u.department_id, u.student_id, u.bio, u.avatar_url, u.status, u.created_at,
              i.name as institution_name, d.name as department_name,
              COALESCE(r.name, INITCAP(u.role)) AS role_name,
              COALESCE(r.color, '#2563EB') AS role_color
@@ -194,8 +218,34 @@ async function updateProfile(req, res) {
 
     const updatedFullName = fullName || current.full_name;
     const updatedBio = bio !== undefined ? bio : current.bio;
-    const updatedInstId = institutionId ? parseInt(institutionId) : current.institution_id;
-    const updatedDeptId = departmentId ? parseInt(departmentId) : current.department_id;
+    let updatedInstId = current.institution_id;
+    let updatedDeptId = current.department_id;
+
+    // Affiliation is immutable for regular users. Only the system administrator
+    // may change (or clear) their institution and department from this endpoint.
+    if (req.user.role === 'admin') {
+      const hasInstitution = Object.prototype.hasOwnProperty.call(req.body, 'institutionId');
+      const hasDepartment = Object.prototype.hasOwnProperty.call(req.body, 'departmentId');
+      const parseNullableId = (value) => {
+        if (value === '' || value === null || value === undefined) return null;
+        return /^\d+$/.test(String(value)) && Number(value) > 0 ? Number(value) : NaN;
+      };
+
+      if (hasInstitution) updatedInstId = parseNullableId(institutionId);
+      if (hasDepartment) updatedDeptId = parseNullableId(departmentId);
+      if (Number.isNaN(updatedInstId) || Number.isNaN(updatedDeptId)) {
+        return res.status(400).json({ message: 'Please select a valid institution and department.' });
+      }
+      if (updatedDeptId) {
+        const department = await query(
+          'SELECT id FROM departments WHERE id = $1 AND institution_id = $2',
+          [updatedDeptId, updatedInstId],
+        );
+        if (!updatedInstId || !department.rowCount) {
+          return res.status(400).json({ message: 'The selected department does not belong to the selected institution.' });
+        }
+      }
+    }
     const updatedAvatarUrl = avatarUrl || current.avatar_url;
 
     const updateQuery = `
@@ -205,7 +255,7 @@ async function updateProfile(req, res) {
       RETURNING id, email, full_name, role, role_id, institution_id, department_id, bio, avatar_url, status, created_at
     `;
 
-    const result = await query(updateQuery, [
+    await query(updateQuery, [
       updatedFullName,
       updatedBio,
       updatedInstId,
