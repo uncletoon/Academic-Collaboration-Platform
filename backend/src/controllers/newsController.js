@@ -30,8 +30,14 @@ const discardUploads = (featureImage, documents) => {
   documents.forEach((file) => removeFile(`/uploads/news/documents/${file.filename}`));
 };
 
+const canManageNews = (user, item) => user.role === 'admin' || (
+  user.role === 'institution_admin'
+  && user.institution_id
+  && Number(item.institution_id) === Number(user.institution_id)
+);
+
 const newsSelect = `
-  SELECT n.*, u.full_name AS author_name,
+  SELECT n.*, u.full_name AS author_name, i.name AS institution_name,
          COALESCE(
            json_agg(
              json_build_object(
@@ -45,6 +51,7 @@ const newsSelect = `
          ) AS documents
   FROM news n
   LEFT JOIN users u ON n.created_by = u.id
+  LEFT JOIN institutions i ON n.institution_id = i.id
   LEFT JOIN news_documents nd ON nd.news_id = n.id
 `;
 
@@ -52,7 +59,7 @@ async function getAllNews(req, res) {
   try {
     const result = await query(`
       ${newsSelect}
-      GROUP BY n.id, u.full_name
+      GROUP BY n.id, u.full_name, i.name
       ORDER BY n.created_at DESC
     `);
     return res.status(200).json({ news: result.rows });
@@ -69,6 +76,7 @@ async function createNews(req, res) {
     const { title, description } = req.body;
     const category = allowedCategories.has(req.body.category) ? req.body.category : 'Other';
     const externalLink = normalizeLink(req.body.link);
+    const institutionId = req.user.role === 'institution_admin' ? req.user.institution_id : null;
 
     if (!title?.trim() || !description?.trim() || !featureImage) {
       discardUploads(featureImage, documents);
@@ -78,13 +86,17 @@ async function createNews(req, res) {
       discardUploads(featureImage, documents);
       return res.status(400).json({ message: 'Link must be a valid HTTP or HTTPS URL.' });
     }
+    if (req.user.role === 'institution_admin' && !institutionId) {
+      discardUploads(featureImage, documents);
+      return res.status(403).json({ message: 'Institution Administrators must belong to an institution before publishing news.' });
+    }
 
     const imagePath = `/uploads/news/images/${featureImage.filename}`;
     const result = await query(`
-      INSERT INTO news (title, description, category, feature_image, external_link, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO news (title, description, category, feature_image, external_link, created_by, institution_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
-    `, [title.trim(), description.trim(), category, imagePath, externalLink, req.user.id]);
+    `, [title.trim(), description.trim(), category, imagePath, externalLink, req.user.id, institutionId]);
 
     const item = result.rows[0];
     for (const file of documents) {
@@ -111,6 +123,10 @@ async function updateNews(req, res) {
     if (!existing.rowCount) {
       discardUploads(featureImage, documents);
       return res.status(404).json({ message: 'News item not found.' });
+    }
+    if (!canManageNews(req.user, existing.rows[0])) {
+      discardUploads(featureImage, documents);
+      return res.status(403).json({ message: 'You can edit only news published for your institution.' });
     }
 
     const { title, description } = req.body;
@@ -156,8 +172,11 @@ async function updateNews(req, res) {
 async function deleteNews(req, res) {
   try {
     const newsId = Number(req.params.id);
-    const item = await query('SELECT feature_image FROM news WHERE id = $1', [newsId]);
+    const item = await query('SELECT feature_image, institution_id FROM news WHERE id = $1', [newsId]);
     if (!item.rowCount) return res.status(404).json({ message: 'News item not found.' });
+    if (!canManageNews(req.user, item.rows[0])) {
+      return res.status(403).json({ message: 'You can delete only news published for your institution.' });
+    }
 
     const documents = await query('SELECT filepath FROM news_documents WHERE news_id = $1', [newsId]);
     await query('DELETE FROM news WHERE id = $1', [newsId]);
@@ -172,6 +191,11 @@ async function deleteNews(req, res) {
 
 async function deleteNewsDocument(req, res) {
   try {
+    const newsItem = await query('SELECT institution_id FROM news WHERE id = $1', [Number(req.params.id)]);
+    if (!newsItem.rowCount) return res.status(404).json({ message: 'News item not found.' });
+    if (!canManageNews(req.user, newsItem.rows[0])) {
+      return res.status(403).json({ message: 'You can change only news published for your institution.' });
+    }
     const result = await query(
       'DELETE FROM news_documents WHERE id = $1 AND news_id = $2 RETURNING filepath',
       [Number(req.params.documentId), Number(req.params.id)]

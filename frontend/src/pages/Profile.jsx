@@ -3,12 +3,20 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Camera, Check, AlertCircle, Loader2, LockKeyhole } from 'lucide-react';
 
+const personNamePattern = /^[\p{L}\p{M}]+(?:[ '\-][\p{L}\p{M}]+)*$/u;
+
 const Profile = () => {
   const { user, refreshUser } = useAuth();
   const canEditAffiliation = user?.role === 'admin';
+  const needsProfessionalDetails = ['lecturer', 'institution_admin', 'admin'].includes(user?.role);
   
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [bio, setBio] = useState(user?.bio || '');
+  const [staffId, setStaffId] = useState(user?.staff_id || '');
+  const [jobTitle, setJobTitle] = useState(user?.job_title || '');
+  const [qualification, setQualification] = useState(user?.qualification || '');
+  const [expertise, setExpertise] = useState(user?.expertise || '');
+  const [phoneNumber, setPhoneNumber] = useState(user?.phone_number || '');
   const [selectedFile, setSelectedFile] = useState(null);
   
   // Metadata selection states
@@ -58,6 +66,14 @@ const Profile = () => {
 
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
+    if (!personNamePattern.test(fullName.trim())) {
+      setErrorMsg('Full name must use letters, spaces, apostrophes, or hyphens only.');
+      return;
+    }
+    if (needsProfessionalDetails && (!staffId || !jobTitle || !qualification || !expertise || !phoneNumber)) {
+      setErrorMsg('Complete every professional verification field before saving.');
+      return;
+    }
     setLoading(true);
     setSuccessMsg('');
     setErrorMsg('');
@@ -65,6 +81,13 @@ const Profile = () => {
     const formData = new FormData();
     formData.append('fullName', fullName);
     formData.append('bio', bio);
+    if (needsProfessionalDetails) {
+      formData.append('staffId', staffId);
+      formData.append('jobTitle', jobTitle);
+      formData.append('qualification', qualification);
+      formData.append('expertise', expertise);
+      formData.append('phoneNumber', phoneNumber);
+    }
     if (canEditAffiliation) {
       formData.append('institutionId', selectedInstitution || '');
       formData.append('departmentId', selectedDepartment || '');
@@ -134,14 +157,14 @@ const Profile = () => {
       </div>
 
       {successMsg && (
-        <div className="p-3.5 bg-blue-950/20 border border-blue-900/40 text-blue-400 rounded-xl text-xs font-semibold flex items-center gap-2 animate-slide-up">
+        <div role="status" className="p-3.5 bg-slate-50 border border-slate-300 text-slate-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-slide-up">
           <Check className="h-4 w-4 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="p-3.5 bg-red-950/20 border border-red-900/40 text-red-400 rounded-xl text-xs font-semibold flex items-center gap-2 animate-slide-up">
+        <div role="alert" className="p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-slide-up">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
@@ -224,6 +247,20 @@ const Profile = () => {
             <LockKeyhole className="h-4 w-4 shrink-0 text-slate-500" />
             Institution and department are managed by the system administrator.
           </p>
+        )}
+
+        {needsProfessionalDetails && (
+          <fieldset className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <legend className="px-1 text-xs font-bold uppercase tracking-wider text-slate-700">Professional verification</legend>
+            <p className="text-[11px] leading-5 text-slate-600">Keep these institution-issued details accurate so your academic or administrative role can be verified.</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label><span className="mb-1.5 block text-xs font-semibold text-slate-700">Staff ID</span><input required maxLength="50" value={staffId} onChange={(e) => setStaffId(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
+              <label><span className="mb-1.5 block text-xs font-semibold text-slate-700">Job title</span><input required maxLength="120" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
+              <label><span className="mb-1.5 block text-xs font-semibold text-slate-700">Highest qualification</span><input required maxLength="255" value={qualification} onChange={(e) => setQualification(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
+              <label><span className="mb-1.5 block text-xs font-semibold text-slate-700">Phone number</span><input required type="tel" maxLength="26" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
+            </div>
+            <label><span className="mb-1.5 block text-xs font-semibold text-slate-700">Expertise or administrative area</span><textarea required rows="3" value={expertise} onChange={(e) => setExpertise(e.target.value)} className="w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
+          </fieldset>
         )}
 
         <div>

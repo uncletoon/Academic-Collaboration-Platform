@@ -67,8 +67,7 @@ INSERT INTO user_roles (name, role_key, description, base_role, color, is_system
 SELECT seed.name, seed.role_key, seed.description, seed.base_role, seed.color, seed.is_system, NULL
 FROM (VALUES
     ('Student', 'student', 'Learns, joins communities, and collaborates on academic work.', 'student', '#2563EB', TRUE),
-    ('Lecturer', 'lecturer', 'Teaches, leads academic activities, and schedules events.', 'lecturer', '#D97706', TRUE),
-    ('Researcher', 'researcher', 'Research-focused title with lecturer collaboration access.', 'lecturer', '#0284C7', FALSE),
+    ('Lecturer', 'lecturer', 'Teaches and leads academic collaboration activities.', 'lecturer', '#D97706', TRUE),
     ('Institution Administrator', 'institution_admin', 'Administrative access restricted to one institution.', 'institution_admin', '#7C3AED', TRUE),
     ('System Administrator', 'admin', 'Unrestricted system administration and moderation access.', 'admin', '#DC2626', TRUE)
 ) AS seed(name, role_key, description, base_role, color, is_system)
@@ -87,10 +86,19 @@ CREATE TABLE IF NOT EXISTS users (
     role_id INT REFERENCES user_roles(id) ON DELETE SET NULL,
     institution_id INT REFERENCES institutions(id) ON DELETE SET NULL,
     department_id INT REFERENCES departments(id) ON DELETE SET NULL,
-    student_id VARCHAR(10),
+    student_id VARCHAR(30),
+    staff_id VARCHAR(50),
+    job_title VARCHAR(120),
+    qualification VARCHAR(255),
+    expertise TEXT,
+    phone_number VARCHAR(30),
     bio TEXT,
     avatar_url VARCHAR(255),
     status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+    approval_status VARCHAR(20) NOT NULL DEFAULT 'approved' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
+    approved_by INT REFERENCES users(id) ON DELETE SET NULL,
+    approved_at TIMESTAMP WITH TIME ZONE,
+    approval_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -102,14 +110,51 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                    WHERE table_name='users' AND column_name='student_id') THEN
-        ALTER TABLE users ADD COLUMN student_id VARCHAR(10);
+        ALTER TABLE users ADD COLUMN student_id VARCHAR(30);
+    ELSE
+        ALTER TABLE users ALTER COLUMN student_id TYPE VARCHAR(30);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='staff_id') THEN
+        ALTER TABLE users ADD COLUMN staff_id VARCHAR(50);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='job_title') THEN
+        ALTER TABLE users ADD COLUMN job_title VARCHAR(120);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='qualification') THEN
+        ALTER TABLE users ADD COLUMN qualification VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='expertise') THEN
+        ALTER TABLE users ADD COLUMN expertise TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='phone_number') THEN
+        ALTER TABLE users ADD COLUMN phone_number VARCHAR(30);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='approval_status') THEN
+        ALTER TABLE users ADD COLUMN approval_status VARCHAR(20) NOT NULL DEFAULT 'approved';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='approved_by') THEN
+        ALTER TABLE users ADD COLUMN approved_by INT REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='approved_at') THEN
+        ALTER TABLE users ADD COLUMN approved_at TIMESTAMP WITH TIME ZONE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='approval_notes') THEN
+        ALTER TABLE users ADD COLUMN approval_notes TEXT;
     END IF;
 END
 $$;
 
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_student_id_format_check;
 ALTER TABLE users ADD CONSTRAINT users_student_id_format_check
-    CHECK (student_id IS NULL OR student_id ~ '^[0-9]{1,10}$');
+    CHECK (student_id IS NULL OR student_id ~ '^[A-Za-z0-9][A-Za-z0-9/-]{0,29}$');
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_approval_status_check;
+ALTER TABLE users ADD CONSTRAINT users_approval_status_check
+    CHECK (approval_status IN ('pending', 'approved', 'rejected'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_staff_id_per_institution
+    ON users (institution_id, LOWER(staff_id))
+    WHERE institution_id IS NOT NULL AND staff_id IS NOT NULL AND staff_id <> '';
 
 UPDATE users u
 SET role_id = r.id
@@ -121,6 +166,14 @@ UPDATE users u SET role = 'institution_admin'
 FROM user_roles r
 WHERE u.role_id = r.id AND r.base_role = 'institution_admin';
 UPDATE users SET role = 'lecturer' WHERE role = 'researcher';
+UPDATE users u
+SET role_id = lecturer.id
+FROM user_roles previous, user_roles lecturer
+WHERE u.role_id = previous.id
+  AND previous.role_key = 'researcher'
+  AND lecturer.role_key = 'lecturer'
+  AND lecturer.institution_id IS NULL;
+DELETE FROM user_roles WHERE role_key = 'researcher';
 ALTER TABLE users ADD CONSTRAINT users_role_check
     CHECK (role IN ('student', 'lecturer', 'institution_admin', 'admin'));
 
@@ -342,9 +395,18 @@ CREATE TABLE IF NOT EXISTS news (
     feature_image VARCHAR(500) NOT NULL,
     external_link VARCHAR(1000),
     created_by INT REFERENCES users(id) ON DELETE SET NULL,
+    institution_id INT REFERENCES institutions(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news' AND column_name='institution_id') THEN
+        ALTER TABLE news ADD COLUMN institution_id INT REFERENCES institutions(id) ON DELETE SET NULL;
+    END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS news_documents (
     id SERIAL PRIMARY KEY,

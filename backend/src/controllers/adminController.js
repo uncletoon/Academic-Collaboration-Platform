@@ -1,6 +1,14 @@
 const { query } = require('../config/db');
 const { recordAdminAction } = require('../services/adminAuditService');
+const { createUserNotification } = require('../services/notificationService');
 const bcrypt = require('bcryptjs');
+const {
+  cleanString,
+  isValidPersonName,
+  isValidStudentId,
+  professionalDetails,
+  hasCompleteProfessionalDetails,
+} = require('../utils/validators');
 
 const isSystemAdministrator = (user) => user.role === 'admin';
 
@@ -54,6 +62,7 @@ async function getAdminStats(req, res) {
          COUNT(*) FILTER (WHERE role = 'student')::int AS students,
          COUNT(*) FILTER (WHERE role = 'lecturer')::int AS lecturers,
          COUNT(*) FILTER (WHERE role = 'institution_admin')::int AS institution_administrators,
+         COUNT(*) FILTER (WHERE approval_status = 'pending')::int AS pending_approvals,
          COUNT(*) FILTER (WHERE status = 'suspended')::int AS suspended
        FROM users
        WHERE $1::int IS NULL OR institution_id = $1`,
@@ -68,7 +77,7 @@ async function getAdminStats(req, res) {
          (SELECT COUNT(*) FROM academic_communities WHERE $1::int IS NULL OR institution_id = $1)::int AS total_communities,
          (SELECT COUNT(*) FROM projects WHERE $1::int IS NULL OR institution_id = $1)::int AS total_projects,
          (SELECT COUNT(*) FROM events WHERE $1::int IS NULL OR institution_id = $1)::int AS total_events,
-         CASE WHEN $1::int IS NULL THEN (SELECT COUNT(*) FROM news)::int ELSE 0 END AS total_news`,
+         (SELECT COUNT(*) FROM news WHERE $1::int IS NULL OR institution_id = $1)::int AS total_news`,
       [scope],
     );
 
@@ -86,6 +95,8 @@ async function getAllUsersDetailed(req, res) {
     const result = await query(
       `SELECT u.id, u.email, u.full_name, u.role, u.role_id, u.status, u.created_at, u.student_id,
               u.institution_id, u.department_id,
+              u.staff_id, u.job_title, u.qualification, u.expertise, u.phone_number,
+              u.approval_status, u.approved_at, u.approval_notes,
               i.name AS institution_name, d.name AS department_name,
               COALESCE(r.name, INITCAP(REPLACE(u.role, '_', ' '))) AS role_name,
               COALESCE(r.color, '#2563EB') AS role_color,
@@ -108,35 +119,49 @@ async function getAllUsersDetailed(req, res) {
 async function createUser(req, res) {
   const scope = institutionScope(req, res);
   if (scope === undefined) return;
-  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-  const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : '';
+  const email = cleanString(req.body.email).toLowerCase();
+  const fullName = cleanString(req.body.fullName);
   const password = typeof req.body.password === 'string' ? req.body.password : '';
   const roleId = validId(req.body.roleId);
   const institutionId = scope || validId(req.body.institutionId);
   const departmentId = validId(req.body.departmentId);
-  const studentId = typeof req.body.studentId === 'string' ? req.body.studentId.trim() : '';
-  const bio = typeof req.body.bio === 'string' ? req.body.bio.trim() : '';
+  const studentId = cleanString(req.body.studentId);
+  const bio = cleanString(req.body.bio);
+  const professional = professionalDetails(req.body);
 
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ message: 'A valid email address is required.' });
-  if (!fullName) return res.status(400).json({ message: 'Full name is required.' });
+  if (!isValidPersonName(fullName)) return res.status(400).json({ message: 'Full name must use letters, spaces, apostrophes, or hyphens only.' });
   if (password.length < 8) return res.status(400).json({ message: 'Password must contain at least 8 characters.' });
   if (!roleId) return res.status(400).json({ message: 'A valid role is required.' });
 
   try {
     const roleSelection = await getRoleForAssignment(roleId, institutionId, scope);
     if (roleSelection.error) return res.status(roleSelection.status).json({ message: roleSelection.error });
-    if (roleSelection.role.base_role === 'student' && !/^\d{1,10}$/.test(studentId)) {
-      return res.status(400).json({ message: 'Student ID is required and must contain no more than 10 digits.' });
+    if (roleSelection.role.base_role === 'student' && !isValidStudentId(studentId)) {
+      return res.status(400).json({ message: 'Student ID may contain letters, numbers, slashes, or hyphens (maximum 30 characters).' });
+    }
+    if (['lecturer', 'institution_admin', 'admin'].includes(roleSelection.role.base_role)
+      && !hasCompleteProfessionalDetails(professional)) {
+      return res.status(400).json({ message: 'Staff ID, job title, qualification, expertise, and a valid phone number are required for this role.' });
     }
     if (!(await departmentMatchesInstitution(departmentId, institutionId))) {
       return res.status(400).json({ message: 'The selected department does not belong to the selected institution.' });
     }
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await query(
-      `INSERT INTO users (email, password_hash, full_name, role, role_id, institution_id, department_id, student_id, bio)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id, email, full_name, role, role_id, institution_id, department_id, student_id, bio, status, created_at`,
-      [email, passwordHash, fullName, roleSelection.role.base_role, roleSelection.role.id, institutionId, departmentId, roleSelection.role.base_role === 'student' ? studentId : null, bio],
+      `INSERT INTO users (
+         email, password_hash, full_name, role, role_id, institution_id, department_id, student_id,
+         staff_id, job_title, qualification, expertise, phone_number, bio, approval_status, approved_by, approved_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'approved', $15, CURRENT_TIMESTAMP)
+       RETURNING id, email, full_name, role, role_id, institution_id, department_id, student_id,
+                 staff_id, job_title, qualification, expertise, phone_number, bio, status, approval_status, created_at`,
+      [
+        email, passwordHash, fullName, roleSelection.role.base_role, roleSelection.role.id,
+        institutionId, departmentId, roleSelection.role.base_role === 'student' ? studentId : null,
+        professional.staffId || null, professional.jobTitle || null, professional.qualification || null,
+        professional.expertise || null, professional.phoneNumber || null, bio, req.user.id,
+      ],
     );
     const user = result.rows[0];
     await recordAdminAction(req.user.id, 'created', 'user', user.id, `Created user account for ${fullName}.`, institutionId);
@@ -153,15 +178,16 @@ async function updateUser(req, res) {
   const scope = institutionScope(req, res);
   if (scope === undefined) return;
   const targetUserId = validId(req.params.userId);
-  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-  const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : '';
+  const email = cleanString(req.body.email).toLowerCase();
+  const fullName = cleanString(req.body.fullName);
   const roleId = validId(req.body.roleId);
   const requestedInstitution = validId(req.body.institutionId);
   const requestedDepartment = validId(req.body.departmentId);
-  const studentId = typeof req.body.studentId === 'string' ? req.body.studentId.trim() : '';
-  const bio = typeof req.body.bio === 'string' ? req.body.bio.trim() : '';
+  const studentId = cleanString(req.body.studentId);
+  const bio = cleanString(req.body.bio);
+  const professional = professionalDetails(req.body);
   if (!targetUserId) return res.status(400).json({ message: 'A valid user ID is required.' });
-  if (!email || !/^\S+@\S+\.\S+$/.test(email) || !fullName || !roleId) {
+  if (!email || !/^\S+@\S+\.\S+$/.test(email) || !isValidPersonName(fullName) || !roleId) {
     return res.status(400).json({ message: 'Full name, valid email, and role are required.' });
   }
 
@@ -183,8 +209,12 @@ async function updateUser(req, res) {
     const departmentId = scope ? current.department_id : requestedDepartment;
     const roleSelection = await getRoleForAssignment(roleId, institutionId, scope);
     if (roleSelection.error) return res.status(roleSelection.status).json({ message: roleSelection.error });
-    if (roleSelection.role.base_role === 'student' && !/^\d{1,10}$/.test(studentId)) {
-      return res.status(400).json({ message: 'Student ID is required and must contain no more than 10 digits.' });
+    if (roleSelection.role.base_role === 'student' && !isValidStudentId(studentId)) {
+      return res.status(400).json({ message: 'Student ID may contain letters, numbers, slashes, or hyphens (maximum 30 characters).' });
+    }
+    if (['lecturer', 'institution_admin', 'admin'].includes(roleSelection.role.base_role)
+      && !hasCompleteProfessionalDetails(professional)) {
+      return res.status(400).json({ message: 'Staff ID, job title, qualification, expertise, and a valid phone number are required for this role.' });
     }
     if (targetUserId === Number(req.user.id) && roleSelection.role.base_role !== 'admin') {
       return res.status(400).json({ message: 'You cannot remove your own system administrator access.' });
@@ -195,10 +225,18 @@ async function updateUser(req, res) {
 
     const result = await query(
       `UPDATE users
-       SET email = $1, full_name = $2, role = $3, role_id = $4, institution_id = $5, department_id = $6, student_id = $7, bio = $8
-       WHERE id = $9
-       RETURNING id, email, full_name, role, role_id, institution_id, department_id, student_id, bio, status, created_at`,
-      [email, fullName, roleSelection.role.base_role, roleSelection.role.id, institutionId, departmentId, roleSelection.role.base_role === 'student' ? studentId : null, bio, targetUserId],
+       SET email = $1, full_name = $2, role = $3, role_id = $4, institution_id = $5,
+           department_id = $6, student_id = $7, staff_id = $8, job_title = $9,
+           qualification = $10, expertise = $11, phone_number = $12, bio = $13
+       WHERE id = $14
+       RETURNING id, email, full_name, role, role_id, institution_id, department_id, student_id,
+                 staff_id, job_title, qualification, expertise, phone_number, bio, status, approval_status, created_at`,
+      [
+        email, fullName, roleSelection.role.base_role, roleSelection.role.id, institutionId, departmentId,
+        roleSelection.role.base_role === 'student' ? studentId : null,
+        professional.staffId || null, professional.jobTitle || null, professional.qualification || null,
+        professional.expertise || null, professional.phoneNumber || null, bio, targetUserId,
+      ],
     );
     await recordAdminAction(req.user.id, 'updated', 'user', targetUserId, `Updated user account for ${fullName}.`, institutionId);
     return res.status(200).json({ message: 'User updated successfully.', user: result.rows[0] });
@@ -250,7 +288,11 @@ async function changeUserRole(req, res) {
   if (!targetUserId || !roleId) return res.status(400).json({ message: 'A valid user and role are required.' });
 
   try {
-    const targetResult = await query('SELECT id, role, full_name, institution_id, student_id FROM users WHERE id = $1', [targetUserId]);
+    const targetResult = await query(
+      `SELECT id, role, full_name, institution_id, student_id, staff_id, job_title,
+              qualification, expertise, phone_number FROM users WHERE id = $1`,
+      [targetUserId],
+    );
     if (!targetResult.rowCount) return res.status(404).json({ message: 'User not found.' });
     const target = targetResult.rows[0];
     if (scope && Number(target.institution_id) !== scope) return res.status(403).json({ message: 'You can manage only users from your institution.' });
@@ -272,8 +314,18 @@ async function changeUserRole(req, res) {
     if (role.base_role === 'institution_admin' && !target.institution_id) {
       return res.status(400).json({ message: 'An institution administrator must belong to an institution.' });
     }
-    if (role.base_role === 'student' && !/^\d{1,10}$/.test(target.student_id || '')) {
+    if (role.base_role === 'student' && !isValidStudentId(target.student_id || '')) {
       return res.status(400).json({ message: 'Add a valid student ID in the user editor before assigning a student role.' });
+    }
+    if (['lecturer', 'institution_admin', 'admin'].includes(role.base_role)
+      && !hasCompleteProfessionalDetails({
+        staffId: target.staff_id,
+        jobTitle: target.job_title,
+        qualification: target.qualification,
+        expertise: target.expertise,
+        phoneNumber: target.phone_number,
+      })) {
+      return res.status(400).json({ message: 'Add complete professional details in the user editor before assigning this role.' });
     }
 
     await query(
@@ -285,6 +337,78 @@ async function changeUserRole(req, res) {
   } catch (error) {
     console.error('Change user role error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+async function reviewInstitutionAdministrator(req, res) {
+  const targetUserId = validId(req.params.userId);
+  const decision = cleanString(req.body.decision).toLowerCase();
+  const notes = cleanString(req.body.notes);
+  if (!targetUserId || !['approve', 'reject'].includes(decision)) {
+    return res.status(400).json({ message: 'A valid applicant and review decision are required.' });
+  }
+  if (targetUserId === Number(req.user.id)) {
+    return res.status(400).json({ message: 'You cannot review your own administrator account.' });
+  }
+
+  try {
+    const selected = await query(
+      `SELECT id, full_name, role, institution_id, approval_status, staff_id, job_title,
+              qualification, expertise, phone_number
+       FROM users WHERE id = $1`,
+      [targetUserId],
+    );
+    if (!selected.rowCount || selected.rows[0].role !== 'institution_admin') {
+      return res.status(404).json({ message: 'Institution Administrator application not found.' });
+    }
+    const applicant = selected.rows[0];
+    if (applicant.approval_status !== 'pending') {
+      return res.status(400).json({ message: 'This application has already been reviewed.' });
+    }
+    if (decision === 'approve') {
+      const complete = applicant.institution_id && hasCompleteProfessionalDetails({
+        staffId: applicant.staff_id,
+        jobTitle: applicant.job_title,
+        qualification: applicant.qualification,
+        expertise: applicant.expertise,
+        phoneNumber: applicant.phone_number,
+      });
+      if (!complete) {
+        return res.status(400).json({ message: 'Complete the applicant institution and professional details before approval.' });
+      }
+    }
+
+    const nextStatus = decision === 'approve' ? 'approved' : 'rejected';
+    await query(
+      `UPDATE users
+       SET approval_status = $1, approved_by = $2, approved_at = CURRENT_TIMESTAMP, approval_notes = $3
+       WHERE id = $4`,
+      [nextStatus, req.user.id, notes || null, targetUserId],
+    );
+    await recordAdminAction(
+      req.user.id,
+      decision === 'approve' ? 'approved' : 'rejected',
+      'institution_admin_application',
+      targetUserId,
+      `${decision === 'approve' ? 'Approved' : 'Rejected'} Institution Administrator application for ${applicant.full_name}.`,
+      applicant.institution_id,
+    );
+    await createUserNotification({
+      userId: targetUserId,
+      title: decision === 'approve' ? 'Administrator application approved' : 'Administrator application reviewed',
+      content: decision === 'approve'
+        ? 'Your Institution Administrator application was approved. You can now sign in.'
+        : (notes || 'Your Institution Administrator application was not approved.'),
+      type: 'system',
+      link: '/profile',
+    });
+    return res.status(200).json({
+      message: `Application ${decision === 'approve' ? 'approved' : 'rejected'} successfully.`,
+      approvalStatus: nextStatus,
+    });
+  } catch (error) {
+    console.error('Review Institution Administrator error:', error);
+    return res.status(500).json({ message: 'Unable to review this application.' });
   }
 }
 
@@ -373,6 +497,7 @@ module.exports = {
   updateUser,
   toggleUserStatus,
   changeUserRole,
+  reviewInstitutionAdministrator,
   getModerationCommunities,
   getModerationEvents,
   adminDeleteCommunity,

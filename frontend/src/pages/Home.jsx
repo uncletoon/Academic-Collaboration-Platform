@@ -70,14 +70,14 @@ const Home = ({ setCurrentTab }) => {
             <span className="portal-orbit__node portal-orbit__node--three"><CalendarDays /></span>
           </div>
           <div className="portal-home-visual__activity">
-            <span><i /> Researchers connecting now</span>
+            <span><i /> Academic members connecting now</span>
             <strong>{data.communities.reduce((total, item) => total + Number(item.member_count || 0), 0) || 'Growing'}</strong>
           </div>
         </div>}
       >
         <div className="portal-hero__proof">
           <span><CheckCircle2 aria-hidden="true" /> Cross-institution discovery</span>
-          <span><CheckCircle2 aria-hidden="true" /> Research-ready workspaces</span>
+          <span><CheckCircle2 aria-hidden="true" /> Collaboration-ready workspaces</span>
         </div>
         <div className="portal-home-cta-row">
           <button className="portal-primary-button" onClick={() => setCurrentTab('communities')}>Explore the network <ArrowRight /></button>

@@ -209,6 +209,27 @@ async function createProject(req, res) {
       );
     }
     await client.query('COMMIT');
+    const recipients = accessScope === 'institution'
+      ? await query(
+        `SELECT id FROM users
+         WHERE institution_id = $1 AND id <> $2 AND status = 'active' AND approval_status = 'approved'`,
+        [req.user.institution_id, req.user.id],
+      )
+      : await query(
+        `SELECT id FROM users
+         WHERE id <> $1 AND status = 'active' AND approval_status = 'approved'`,
+        [req.user.id],
+      );
+    const institutional = accessScope === 'institution';
+    await Promise.all(recipients.rows.map(({ id }) => createUserNotification({
+        userId: id,
+        title: `New ${institutional ? 'institution ' : ''}collaboration: ${project.title}`,
+        content: institutional
+          ? `${req.user.full_name || 'An institution member'} created a new collaboration project for your institution.`
+          : `${req.user.full_name || 'A platform member'} created a new collaboration project available to everyone.`,
+        type: 'project',
+        link: `/projects?id=${project.id}`,
+      })));
     return res.status(201).json({ message: 'Collaboration created successfully.', project });
   } catch (error) {
     await client.query('ROLLBACK');

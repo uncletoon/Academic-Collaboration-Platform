@@ -94,15 +94,15 @@ async function getEventById(req, res) {
   }
 }
 
-// Create event (Lecturers, Researchers, Admins only)
+// Create event (Institution and System Administrators only)
 async function createEvent(req, res) {
   try {
     const { title, description, eventDate, location, meetingLink, capacity, isInstitutional } = req.body;
     const userId = req.user.id;
     const role = req.user.role;
 
-    if (role === 'student') {
-      return res.status(403).json({ message: 'Forbidden: Students cannot organize events.' });
+    if (!['institution_admin', 'admin'].includes(role)) {
+      return res.status(403).json({ message: 'Only Institution Administrators and System Administrators can create events.' });
     }
 
     if (!title || !description || !eventDate) {

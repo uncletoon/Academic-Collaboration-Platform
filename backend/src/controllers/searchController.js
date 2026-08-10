@@ -21,7 +21,8 @@ async function globalSearch(req, res) {
       SELECT u.id, u.full_name, u.email, u.role, u.avatar_url, i.name as institution_name
       FROM users u
       LEFT JOIN institutions i ON u.institution_id = i.id
-      WHERE u.full_name ILIKE $1 OR u.email ILIKE $1
+      WHERE (u.full_name ILIKE $1 OR u.email ILIKE $1)
+        AND u.status = 'active' AND u.approval_status = 'approved'
       LIMIT 10
     `, [pattern]);
 

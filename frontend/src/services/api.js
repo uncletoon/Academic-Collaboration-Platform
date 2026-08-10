@@ -171,6 +171,7 @@ const api = {
   updateAdminUser: (id, data) => request(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleUserStatus: (userId) => request(`/admin/users/${userId}/status`, { method: 'PUT' }),
   changeUserRole: (userId, roleId) => request(`/admin/users/${userId}/role`, { method: 'PUT', body: JSON.stringify({ roleId }) }),
+  reviewInstitutionAdministrator: (userId, decision, notes = '') => request(`/admin/users/${userId}/approval`, { method: 'PUT', body: JSON.stringify({ decision, notes }) }),
   getAdminInstitutions: () => request('/admin/institutions'),
   createAdminInstitution: (data) => request('/admin/institutions', { method: 'POST', body: JSON.stringify(data) }),
   updateAdminInstitution: (id, data) => request(`/admin/institutions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

@@ -103,6 +103,30 @@ async function createCommunity(req, res) {
     // Creator automatically joins community
     await query('INSERT INTO community_members (community_id, user_id) VALUES ($1, $2)', [community.id, userId]);
 
+    if (actualPrivacy !== 'private') {
+      const recipients = actualPrivacy === 'institution'
+        ? await query(
+          `SELECT id FROM users
+           WHERE institution_id = $1 AND id <> $2 AND status = 'active' AND approval_status = 'approved'`,
+          [institutionId, userId],
+        )
+        : await query(
+          `SELECT id FROM users
+           WHERE id <> $1 AND status = 'active' AND approval_status = 'approved'`,
+          [userId],
+        );
+      const institutional = actualPrivacy === 'institution';
+      await Promise.all(recipients.rows.map(({ id }) => createUserNotification({
+        userId: id,
+        title: `New ${institutional ? 'institution ' : ''}community: ${community.name}`,
+        content: institutional
+          ? `${req.user.full_name || 'An institution member'} created a new community for your institution.`
+          : `${req.user.full_name || 'A platform member'} created a new public community available to everyone.`,
+        type: 'community',
+        link: `/communities?id=${community.id}`,
+      })));
+    }
+
     return res.status(201).json({
       message: 'Community created successfully',
       community
@@ -267,7 +291,10 @@ async function inviteUser(req, res) {
 
     if (!targetEmail) return res.status(400).json({ message: 'Target email is required.' });
 
-    const userQuery = await query('SELECT id, institution_id FROM users WHERE email = $1', [targetEmail.trim().toLowerCase()]);
+    const userQuery = await query(
+      "SELECT id, institution_id FROM users WHERE email = $1 AND status = 'active' AND approval_status = 'approved'",
+      [targetEmail.trim().toLowerCase()],
+    );
     if (userQuery.rowCount === 0) return res.status(404).json({ message: 'User with this email not found.' });
     const targetUserId = userQuery.rows[0].id;
     if (

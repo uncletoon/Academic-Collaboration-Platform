@@ -20,7 +20,11 @@ const emptyForm = { title: '', description: '', category: 'Students', link: '' }
 
 const News = () => {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const canPublish = ['admin', 'institution_admin'].includes(user?.role);
+  const canManageItem = (item) => user?.role === 'admin' || (
+    user?.role === 'institution_admin'
+    && Number(item.institution_id) === Number(user.institution_id)
+  );
   const storyId = Number(window.location.pathname.match(/^\/news\/(\d+)\/?$/)?.[1]) || null;
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -148,7 +152,7 @@ const News = () => {
       <section className="news-editor" role="dialog" aria-modal="true" aria-labelledby="news-editor-title">
         <header>
           <div>
-            <p className="news-kicker">Admin newsroom</p>
+            <p className="news-kicker">Institution newsroom</p>
             <h2 id="news-editor-title">{editing.mode === 'create' ? 'Publish a news story' : 'Edit news story'}</h2>
           </div>
           <button className="news-close news-close--static" onClick={closeEditor} aria-label="Close editor"><X /></button>
@@ -249,7 +253,7 @@ const News = () => {
           <h1>What’s happening in our academic community</h1>
           <p>Official updates for students, new books, opportunities, and everything that keeps our community moving.</p>
         </div>
-        {isAdmin && (
+        {canPublish && (
           <button className="news-button news-button--primary" onClick={openCreate}>
             <Plus /> Publish news
           </button>
@@ -305,7 +309,7 @@ const News = () => {
                   <span className="news-read">Read full story <ArrowUpRight /></span>
                 </div>
               </a>
-              {isAdmin && (
+              {canManageItem(item) && (
                 <div className="news-card__admin">
                   <button onClick={() => openEdit(item)}><Edit3 /> Edit</button>
                   <button className="is-danger" onClick={() => removeItem(item)}><Trash2 /> Delete</button>

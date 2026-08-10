@@ -94,7 +94,7 @@ const EventModal = ({ title, description, onClose, children }) => {
 
 const EventsPage = () => {
   const { user } = useAuth();
-  const isCreatorRole = user?.role !== "student";
+  const isCreatorRole = ["admin", "institution_admin"].includes(user?.role);
   const [events, setEvents] = useState([]);
   const [selected, setSelected] = useState(null);
   const [attendees, setAttendees] = useState([]);

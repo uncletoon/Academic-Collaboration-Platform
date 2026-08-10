@@ -31,7 +31,7 @@ const { query } = require('../config/db');
 async function checkUserActive(req, res, next) {
   try {
     const result = await query(
-      'SELECT email, full_name, avatar_url, role, institution_id, department_id, status FROM users WHERE id = $1',
+      'SELECT email, full_name, avatar_url, role, institution_id, department_id, status, approval_status FROM users WHERE id = $1',
       [req.user.id],
     );
     if (result.rowCount === 0) {
@@ -39,6 +39,9 @@ async function checkUserActive(req, res, next) {
     }
     if (result.rows[0].status === 'suspended') {
       return res.status(403).json({ message: 'Your account is suspended. Contact administrator.' });
+    }
+    if (result.rows[0].approval_status !== 'approved') {
+      return res.status(403).json({ message: 'Your account must be approved by a System Administrator before it can be used.' });
     }
     // Use current authorization and institution data even when an older token is still active.
     req.user = { ...req.user, ...result.rows[0] };

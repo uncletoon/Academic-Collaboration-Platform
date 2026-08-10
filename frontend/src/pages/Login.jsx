@@ -37,7 +37,7 @@ const Login = ({ onSwitchRegister }) => {
   });
 
   const stats = [
-    { icon: Users, label: 'Researchers', value: '12,000+' },
+    { icon: Users, label: 'Academic members', value: '12,000+' },
     { icon: BookOpen, label: 'Projects', value: '3,400+' },
     { icon: Globe, label: 'Institutions', value: '280+' },
   ];
@@ -82,7 +82,7 @@ const Login = ({ onSwitchRegister }) => {
             Academic Collaboration Network
           </h1>
           <p className="text-base leading-relaxed" style={{ color: 'rgba(186,230,253,0.85)' }}>
-            Connect with researchers, join cross-institutional projects, and discover academic events worldwide.
+            Connect with academic members, join cross-institutional projects, and discover academic events worldwide.
           </p>
         </div>
 

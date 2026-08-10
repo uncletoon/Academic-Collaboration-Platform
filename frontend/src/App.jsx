@@ -115,7 +115,6 @@ const AppContent = () => {
       case 'events':
         return <Events />;
       case 'news':
-      case 'research':
         return <News />;
       case 'chat':
         return <Chat />;

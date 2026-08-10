@@ -73,7 +73,7 @@ router.delete('/projects/:id/files/:fileId', projCtrl.deleteProjectFile);
 
 // --- 5. Academic Events Routes ---
 router.get('/events', eventCtrl.getAllEvents);
-router.post('/events', eventCtrl.createEvent);
+router.post('/events', authorizeRoles('admin', 'institution_admin'), eventCtrl.createEvent);
 router.get('/events/:id', eventCtrl.getEventById);
 router.put('/events/:id', eventCtrl.updateEvent);
 router.post('/events/:id/register', eventCtrl.toggleEventRegistration);
@@ -85,10 +85,10 @@ const newsUpload = upload.fields([
   { name: 'supportiveDocuments', maxCount: 8 },
 ]);
 router.get('/news', newsCtrl.getAllNews);
-router.post('/news', authorizeRoles('admin'), newsUpload, newsCtrl.createNews);
-router.put('/news/:id', authorizeRoles('admin'), newsUpload, newsCtrl.updateNews);
-router.delete('/news/:id', authorizeRoles('admin'), newsCtrl.deleteNews);
-router.delete('/news/:id/documents/:documentId', authorizeRoles('admin'), newsCtrl.deleteNewsDocument);
+router.post('/news', authorizeRoles('admin', 'institution_admin'), newsUpload, newsCtrl.createNews);
+router.put('/news/:id', authorizeRoles('admin', 'institution_admin'), newsUpload, newsCtrl.updateNews);
+router.delete('/news/:id', authorizeRoles('admin', 'institution_admin'), newsCtrl.deleteNews);
+router.delete('/news/:id/documents/:documentId', authorizeRoles('admin', 'institution_admin'), newsCtrl.deleteNewsDocument);
 router.get('/news/:id/documents/:documentId/download', newsCtrl.downloadNewsDocument);
 
 // --- 7. Real-Time Chat Routes ---
@@ -116,6 +116,7 @@ router.post('/admin/users', authorizeAdminPanel, adminCtrl.createUser);
 router.put('/admin/users/:userId', authorizeAdminPanel, adminCtrl.updateUser);
 router.put('/admin/users/:userId/status', authorizeAdminPanel, adminCtrl.toggleUserStatus);
 router.put('/admin/users/:userId/role', authorizeAdminPanel, adminCtrl.changeUserRole);
+router.put('/admin/users/:userId/approval', authorizeRoles('admin'), adminCtrl.reviewInstitutionAdministrator);
 router.get('/admin/institutions', authorizeAdminPanel, adminDirectoryCtrl.getInstitutions);
 router.post('/admin/institutions', authorizeRoles('admin'), adminDirectoryCtrl.createInstitution);
 router.put('/admin/institutions/:id', authorizeRoles('admin'), adminDirectoryCtrl.updateInstitution);
